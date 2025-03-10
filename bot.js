@@ -1,7 +1,11 @@
-require("dotenv").config();
-const puppeteer = require("puppeteer");
-const TelegramBot = require("node-telegram-bot-api");
-const fs = require("fs");
+import "dotenv/config";
+import puppeteer from "puppeteer-extra";
+import StealthPlugin from "puppeteer-extra-plugin-stealth";
+import TelegramBot from "node-telegram-bot-api";
+import fs from "fs";
+
+// Kích hoạt plugin chống phát hiện bot
+puppeteer.use(StealthPlugin());
 
 // Khởi tạo bot Telegram
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
@@ -20,8 +24,9 @@ async function main() {
                 args: ['--no-sandbox', '--disable-setuid-sandbox'],
                 executablePath: process.env.CHROME_BIN || puppeteer.executablePath()
             });
+
             const page = await browser.newPage();
-            await page.setViewport({ width: 10000, height: 10000 });
+            await page.setViewport({ width: 1280, height: 720 });
 
             console.log("🔄 Truy cập trang đăng nhập...");
             await page.goto("https://portal.vhu.edu.vn/login", { waitUntil: "networkidle2", timeout: 90000 });
@@ -44,8 +49,7 @@ async function main() {
             const tableExists = await page.$(".MuiTable-root");
             if (!tableExists) {
                 console.error("❌ Không tìm thấy bảng lịch học!");
-                const pageHTML = await page.content();
-                fs.writeFileSync("debug_schedule.html", pageHTML);
+                fs.writeFileSync("debug_schedule.html", await page.content());
                 await browser.close();
                 return bot.sendMessage(chatId, "❌ Không tìm thấy lịch học. Kiểm tra file debug_schedule.html.");
             }
@@ -55,18 +59,15 @@ async function main() {
                 const ngayHoc = [];
                 const monHocTheoNgay = {};
 
-                const headers = document.querySelectorAll(".MuiTable-root thead tr th");
-                headers.forEach((th, index) => {
+                document.querySelectorAll(".MuiTable-root thead tr th").forEach((th, index) => {
                     if (index > 0) {
                         ngayHoc.push(th.innerText.trim());
                         monHocTheoNgay[th.innerText.trim()] = [];
                     }
                 });
 
-                const bodyRows = document.querySelectorAll(".MuiTable-root tbody tr");
-                bodyRows.forEach((row, rowIndex) => {
-                    const columns = row.querySelectorAll("td");
-                    columns.forEach((col, colIndex) => {
+                document.querySelectorAll(".MuiTable-root tbody tr").forEach(row => {
+                    row.querySelectorAll("td").forEach((col, colIndex) => {
                         if (colIndex > 0 && col.innerText.trim()) {
                             monHocTheoNgay[ngayHoc[colIndex - 1]].push(col.innerText.trim());
                         }
