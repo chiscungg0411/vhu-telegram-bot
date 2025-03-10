@@ -2,6 +2,7 @@
   "name": "vhu-telegram-bot",
   "version": "1.0.0",
   "description": "Bot Telegram lấy lịch học VHU",
+  "type": "commonjs",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js",
@@ -22,7 +23,7 @@
     "node-telegram-bot-api": "^0.66.0",
     "puppeteer": "^24.4.0",
     "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "type": "commonjs"
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
   }
 }
+
