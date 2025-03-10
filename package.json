@@ -7,7 +7,12 @@
     "start": "node bot.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["telegram", "bot", "puppeteer", "vhu"],
+  "keywords": [
+    "telegram",
+    "bot",
+    "puppeteer",
+    "vhu"
+  ],
   "author": "Cuong VO",
   "license": "ISC",
   "dependencies": {
