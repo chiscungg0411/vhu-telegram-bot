@@ -3,11 +3,10 @@ const puppeteer = require("puppeteer");
 const TelegramBot = require("node-telegram-bot-api");
 const fs = require("fs");
 
-// Chạy bot với Webhook thay vì polling để tránh lỗi xung đột
-const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, {
-    webHook: {
-        port: process.env.PORT || 3000
-    }
+const browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    executablePath: '/usr/bin/chromium'
 });
 
 const APP_URL = process.env.RENDER_EXTERNAL_URL; // URL Render (hoặc của server bạn)
