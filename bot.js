@@ -3,32 +3,34 @@ const puppeteer = require("puppeteer");
 const TelegramBot = require("node-telegram-bot-api");
 const fs = require("fs");
 
-const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
+// Chạy bot với Webhook thay vì polling để tránh lỗi xung đột
+const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, {
+    webHook: {
+        port: process.env.PORT || 3000
+    }
+});
+
+const APP_URL = process.env.RENDER_EXTERNAL_URL; // URL Render (hoặc của server bạn)
+bot.setWebHook(`${APP_URL}/bot${process.env.TELEGRAM_BOT_TOKEN}`);
 
 bot.onText(/\/lichhoc/, async (msg) => {
     const chatId = msg.chat.id;
     bot.sendMessage(chatId, "📡 Đang lấy thông tin lịch học tuần này, vui lòng chờ trong giây lát ⌛...");
 
     try {
-        const browser = await puppeteer.launch({ headless: true });
+        const browser = await puppeteer.launch({
+            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            executablePath: process.env.CHROME_BIN || puppeteer.executablePath(),
+            headless: true
+        });
         const page = await browser.newPage();
         await page.setViewport({ width: 10000, height: 10000 });
 
         console.log("🔄 Truy cập trang đăng nhập...");
-        await page.goto("https://portal.vhu.edu.vn/login", { timeout: 87000 });
+        await page.goto("https://portal.vhu.edu.vn/login", { waitUntil: "networkidle2", timeout: 90000 });
 
-        await new Promise(resolve => setTimeout(resolve, 4500)); // Chờ trang tải hoàn tất
-
-        console.log("🔍 Kiểm tra input email...");
-        const emailExists = await page.evaluate(() => !!document.querySelector("input[name='email']"));
-        if (!emailExists) {
-            console.error("❌ Không tìm thấy ô nhập email!");
-
-            const pageHTML = await page.content();
-            fs.writeFileSync("C:/Users/Public/Pictures/debug_login.html", pageHTML);
-            await browser.close();
-            return bot.sendMessage(chatId, "❌ Không tìm thấy ô nhập email. Kiểm tra file debug_login.html.");
-        }
+        // Chờ trang tải hoàn toàn
+        await page.waitForSelector("input[name='email']", { timeout: 20000 });
 
         console.log("📩 Nhập tài khoản...");
         await page.type("input[name='email']", process.env.VHU_EMAIL, { delay: 100 });
@@ -38,20 +40,13 @@ bot.onText(/\/lichhoc/, async (msg) => {
 
         console.log("🔓 Nhấn nút đăng nhập...");
         await page.click("button[type='submit']");
-
-        console.log("⌛ Đang đăng nhập...");
-        await page.waitForNavigation({ timeout: 85000 });
+        await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 90000 });
 
         console.log("📅 Truy cập trang lịch học...");
-        await page.goto("https://portal.vhu.edu.vn/student/schedules", { timeout: 80000 });
+        await page.goto("https://portal.vhu.edu.vn/student/schedules", { waitUntil: "networkidle2", timeout: 90000 });
 
-        console.log("⏳ Chờ trang tải hoàn tất...");
-        await new Promise(resolve => setTimeout(resolve, 8300));
-
-        await page.screenshot({ path: "C:/Users/Public/Pictures/debug_schedule.png", fullPage: true });
-
-        console.log("📜 Kiểm tra dữ liệu lịch học...");
-        const tableExists = await page.evaluate(() => !!document.querySelector(".MuiTable-root"));
+        // Kiểm tra dữ liệu lịch học
+        const tableExists = await page.$(".MuiTable-root");
         if (!tableExists) {
             console.error("❌ Không tìm thấy bảng lịch học!");
 
@@ -61,7 +56,7 @@ bot.onText(/\/lichhoc/, async (msg) => {
             return bot.sendMessage(chatId, "❌ Không tìm thấy lịch học. Kiểm tra file debug_schedule.html.");
         }
 
-        console.log("✅ Lấy dữ liệu lịch học thành công. Trả kết quả về Bot.");
+        console.log("✅ Lấy dữ liệu lịch học thành công.");
         const lichHoc = await page.evaluate(() => {
             const ngayHoc = [];
             const monHocTheoNgay = {};
