@@ -4,9 +4,8 @@ async function getSchedule(username, password) {
     const browser = await puppeteer.launch({
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    executablePath: process.env.CHROME_BIN || '/usr/bin/google-chrome-stable' // Đổi đường dẫn trình duyệt
+    executablePath: process.env.CHROME_BIN || puppeteer.executablePath()
 });
-
 
     const page = await browser.newPage();
 
