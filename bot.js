@@ -1,16 +1,10 @@
-import "dotenv/config";
-import puppeteer from "puppeteer-extra";
-import StealthPlugin from "puppeteer-extra-plugin-stealth";
-import TelegramBot from "node-telegram-bot-api";
-import fs from "fs";
-
-// Kích hoạt plugin chống phát hiện bot
-puppeteer.use(StealthPlugin());
+require("dotenv").config();
+const puppeteer = require("puppeteer");
+const TelegramBot = require("node-telegram-bot-api");
+const fs = require("fs");
 
 // Khởi tạo bot Telegram
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
-const APP_URL = process.env.RENDER_EXTERNAL_URL || "https://vhu-telegram-bot.onrender.com"; // URL của bạn
-bot.setWebHook(`${APP_URL}/bot${process.env.TELEGRAM_BOT_TOKEN}`);
 
 // Hàm chống spam API Telegram
 async function safeSendMessage(chatId, message, options = {}) {
@@ -29,13 +23,12 @@ async function safeSendMessage(chatId, message, options = {}) {
 
 bot.onText(/\/lichhoc/, async (msg) => {
     const chatId = msg.chat.id;
-    safeSendMessage(chatId, "📡 Đang lấy thông tin lịch học tuần này, vui lòng chờ trong giây lát ⌛...");
+    safeSendMessage(chatId, "📡 Đang lấy thông tin lịch học tuần này, vui lòng chờ...");
 
     try {
         const browser = await puppeteer.launch({
-            headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox'],
-            executablePath: '/usr/bin/chromium-browser' // Đường dẫn chính xác trên Render
+            headless: "new",
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
         });
 
         const page = await browser.newPage();
