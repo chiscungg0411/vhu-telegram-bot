@@ -27,10 +27,11 @@ bot.onText(/\/lichhoc/, async (msg) => {
 
     try {
         const browser = await puppeteer.launch({
-          headless: "new",
-          args: ["--no-sandbox", "--disable-setuid-sandbox"],
-          executablePath: "/usr/bin/google-chrome-stable"  // Dùng Chrome có sẵn
-        });
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath()
+    });
+
 
 
         const page = await browser.newPage();
