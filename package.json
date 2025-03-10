@@ -1,0 +1,18 @@
+{
+  "name": "vhu-telegram-bot",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "node-telegram-bot-api": "^0.61.0",
+    "puppeteer": "^21.3.0",
+    "dotenv": "^16.0.3"
+}
+
+}
