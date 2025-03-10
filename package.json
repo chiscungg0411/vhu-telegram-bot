@@ -1,19 +1,22 @@
 {
   "name": "vhu-telegram-bot",
   "version": "1.0.0",
-  "main": "index.js",
+  "description": "Bot Telegram lấy lịch học VHU",
+  "main": "bot.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node bot.js"
+    "start": "node bot.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["telegram", "bot", "puppeteer", "vhu"],
+  "author": "Cuong VO",
   "license": "ISC",
-  "description": "",
   "dependencies": {
+    "dotenv": "^16.0.3",
+    "fs-extra": "^11.1.1",
+    "isomorphic-fetch": "^3.0.0",
     "node-telegram-bot-api": "^0.61.0",
     "puppeteer": "^21.3.0",
-    "dotenv": "^16.0.3"
-}
-
+    "puppeteer-extra": "^3.3.4",
+    "puppeteer-extra-plugin-stealth": "^2.11.1"
+  }
 }
