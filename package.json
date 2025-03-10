@@ -5,8 +5,7 @@
   "type": "module",
   "main": "bot.js",
   "scripts": {
-    "postinstall": "npm run install-chromium",
-    "install-chromium": "curl -fsSL https://deb.nodesource.com/setup_16.x | bash - && apt-get update && apt-get install -y chromium",
+    "postinstall": "npx @puppeteer/browsers install chrome",
     "start": "node bot.js"
   },
   "dependencies": {
@@ -14,8 +13,7 @@
     "fs-extra": "^11.3.0",
     "isomorphic-fetch": "^3.0.0",
     "node-telegram-bot-api": "^0.66.0",
-    "puppeteer": "^24.4.0",
-    "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2"
+    "puppeteer-core": "^24.4.0",
+    "@puppeteer/browsers": "^1.9.1"
   }
 }
