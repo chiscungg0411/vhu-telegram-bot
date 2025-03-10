@@ -2,10 +2,11 @@ const puppeteer = require("puppeteer");
 
 async function getSchedule(username, password) {
     const browser = await puppeteer.launch({
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable',
-        headless: 'new'  // Đảm bảo chạy chế độ headless
-    });
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    executablePath: process.env.CHROME_BIN || '/usr/bin/google-chrome-stable' // Đổi đường dẫn trình duyệt
+});
+
 
     const page = await browser.newPage();
 
