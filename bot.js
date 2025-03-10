@@ -29,7 +29,7 @@ bot.onText(/\/lichhoc/, async (msg) => {
         const browser = await puppeteer.launch({
             headless: "new",
             args: ["--no-sandbox", "--disable-setuid-sandbox"],
-            executablePath: puppeteer.executablePath() // Dùng Chromium đã được tải sẵn
+            executablePath: "/opt/render/project/src/node_modules/puppeteer/.local-chromium/linux-121.0.6167.85/chrome-linux64/chrome"
         });
 
         const page = await browser.newPage();
