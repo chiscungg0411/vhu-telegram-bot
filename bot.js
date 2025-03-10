@@ -29,7 +29,7 @@ bot.onText(/\/lichhoc/, async (msg) => {
         const browser = await puppeteer.launch({
           headless: "new",
           args: ["--no-sandbox", "--disable-setuid-sandbox"],
-          executablePath: "/usr/bin/google-chrome-stable"  // Dùng Chrome mặc định trên hệ thống
+          executablePath: "/usr/bin/google-chrome-stable"  // Dùng Chrome có sẵn
         });
 
 
