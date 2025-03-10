@@ -5,7 +5,7 @@
   "type": "commonjs",
   "main": "bot.js",
   "scripts": {
-    "start": "node bot.js"
+    "start": "bash start.sh"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
