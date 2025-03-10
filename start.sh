@@ -1,10 +1,6 @@
 #!/bin/bash
-
-# Cập nhật danh sách package
-apt-get update 
-
-# Cài đặt Chromium
-apt-get install -y chromium-browser
+# Cập nhật package list và cài đặt Chromium
+apt-get update && apt-get install -y chromium
 
 # Chạy bot
 node bot.js
