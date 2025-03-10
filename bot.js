@@ -8,7 +8,11 @@ import fs from "fs";
 puppeteer.use(StealthPlugin());
 
 // Khởi tạo bot Telegram
-const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
+const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN);
+const APP_URL = "https://vhu-telegram-bot.onrender.com"; // Thay bằng URL của bạn
+bot.setWebHook(`${APP_URL}/bot${process.env.TELEGRAM_BOT_TOKEN}`);
+
+
 
 async function main() {
     const APP_URL = process.env.RENDER_EXTERNAL_URL;
