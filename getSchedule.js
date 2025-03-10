@@ -3,10 +3,10 @@ const puppeteer = require("puppeteer");
 async function getSchedule(username, password) {
     const browser = await puppeteer.launch({
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        executablePath: process.env.CHROME_BIN || puppeteer.executablePath(),
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable',
         headless: 'new'  // Đảm bảo chạy chế độ headless
-      });
-      
+    });
+
     const page = await browser.newPage();
 
     try {
