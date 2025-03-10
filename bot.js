@@ -27,8 +27,9 @@ bot.onText(/\/lichhoc/, async (msg) => {
 
     try {
         const browser = await puppeteer.launch({
-            headless: "new",
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            executablePath: "/usr/bin/chromium" // Cấu hình Chrome cho Render
         });
 
         const page = await browser.newPage();
