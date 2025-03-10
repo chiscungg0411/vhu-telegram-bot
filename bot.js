@@ -1,7 +1,7 @@
-import "dotenv/config";
-import puppeteer from "puppeteer";
-import TelegramBot from "node-telegram-bot-api";
-import fs from "fs";
+require("dotenv").config();
+const puppeteer = require("puppeteer");
+const TelegramBot = require("node-telegram-bot-api");
+const fs = require("fs");
 
 // Khởi tạo bot Telegram
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
@@ -27,8 +27,9 @@ bot.onText(/\/lichhoc/, async (msg) => {
 
     try {
         const browser = await puppeteer.launch({
-            headless: "new",
-            args: ["--no-sandbox", "--disable-setuid-sandbox"]
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            executablePath: "/usr/bin/chromium"  // Đảm bảo Puppeteer dùng Chromium trên Render
         });
 
         const page = await browser.newPage();
