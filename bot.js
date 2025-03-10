@@ -10,14 +10,14 @@ bot.onText(/\/lichhoc/, async (msg) => {
     bot.sendMessage(chatId, "📡 Đang lấy thông tin lịch học tuần này, vui lòng chờ trong giây lát ⌛...");
 
     try {
-        const browser = await puppeteer.launch({ headless: false });
+        const browser = await puppeteer.launch({ headless: true });
         const page = await browser.newPage();
-        await page.setViewport({ width: 8000, height: 8000 });
+        await page.setViewport({ width: 10000, height: 10000 });
 
         console.log("🔄 Truy cập trang đăng nhập...");
-        await page.goto("https://portal.vhu.edu.vn/login", { timeout: 85000 });
+        await page.goto("https://portal.vhu.edu.vn/login", { timeout: 87000 });
 
-        await new Promise(resolve => setTimeout(resolve, 5000)); // Chờ trang tải hoàn tất
+        await new Promise(resolve => setTimeout(resolve, 4500)); // Chờ trang tải hoàn tất
 
         console.log("🔍 Kiểm tra input email...");
         const emailExists = await page.evaluate(() => !!document.querySelector("input[name='email']"));
@@ -61,7 +61,7 @@ bot.onText(/\/lichhoc/, async (msg) => {
             return bot.sendMessage(chatId, "❌ Không tìm thấy lịch học. Kiểm tra file debug_schedule.html.");
         }
 
-        console.log("✅ Lấy dữ liệu lịch học thành công.");
+        console.log("✅ Lấy dữ liệu lịch học thành công. Trả kết quả về Bot.");
         const lichHoc = await page.evaluate(() => {
             const ngayHoc = [];
             const monHocTheoNgay = {};
@@ -75,7 +75,6 @@ bot.onText(/\/lichhoc/, async (msg) => {
                 }
             });
 
-            // Lấy dữ liệu từ bảng theo cột thay vì theo hàng
             const bodyRows = document.querySelectorAll(".MuiTable-root tbody tr");
 
             bodyRows.forEach((row, rowIndex) => {
@@ -95,15 +94,15 @@ bot.onText(/\/lichhoc/, async (msg) => {
         if (Object.keys(lichHoc).length === 0) {
             bot.sendMessage(chatId, "❌ Không tìm thấy lịch học.");
         } else {
-            let message = "📅 *Lịch học của bạn tuần này:*\n\n";
+            let message = "📅 *Lịch học tuần này của bạn:*\n *------------------------------------* \n";
             Object.entries(lichHoc).forEach(([ngay, monHocs]) => {
                 message += `📌 *Ngày:* ${ngay}\n`;
                 if (monHocs.length > 0) {
                     monHocs.forEach((monHoc) => {
-                        message += `📖 *Môn học:* ${monHoc}\n\n`;
+                        message += `📖 *Phòng học - Môn học:* ${monHoc}\n\n`;
                     });
                 } else {
-                    message += "❌ Không có lớp học.\n";
+                    message += "❌ Không có lịch học.\n";
                 }
                 message += "\n";
             });
