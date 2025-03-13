@@ -1,15 +1,15 @@
-import puppeteer from "puppeteer-extra";
+import puppeteer from "puppeteer-core";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
+import puppeteerExtra from "puppeteer-extra";
 
-puppeteer.use(StealthPlugin());
+puppeteerExtra.use(StealthPlugin());
 
 async function getSchedule(username, password) {
     const browser = await puppeteer.launch({
-          executablePath: '/usr/bin/google-chrome-stable', // Đường dẫn Chrome trên Render
-          headless: true,
-          args: ['--no-sandbox', '--disable-setuid-sandbox']
-        });
-
+        executablePath: '/usr/bin/google-chrome-stable', // Dùng Chrome có sẵn trên Render
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
 
     const page = await browser.newPage();
 
