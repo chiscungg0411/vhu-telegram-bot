@@ -5,10 +5,11 @@ puppeteer.use(StealthPlugin());
 
 async function getSchedule(username, password) {
     const browser = await puppeteer.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        executablePath: process.env.CHROME_BIN || puppeteer.executablePath()
-    });
+          executablePath: '/usr/bin/google-chrome-stable', // Đường dẫn Chrome trên Render
+          headless: true,
+          args: ['--no-sandbox', '--disable-setuid-sandbox']
+        });
+
 
     const page = await browser.newPage();
 
