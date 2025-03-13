@@ -1,5 +1,5 @@
 import "dotenv/config";
-import puppeteer from "puppeteer";
+import puppeteer from "puppeteer-core";
 import TelegramBot from "node-telegram-bot-api";
 import fs from "fs";
 
@@ -27,8 +27,9 @@ bot.onText(/\/lichhoc/, async (msg) => {
 
     try {
         const browser = await puppeteer.launch({
-            headless: "new",
-            args: ["--no-sandbox", "--disable-setuid-sandbox"]
+            executablePath: '/usr/bin/google-chrome-stable', // Dùng Chrome có sẵn trên Render
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
         });
 
         const page = await browser.newPage();
