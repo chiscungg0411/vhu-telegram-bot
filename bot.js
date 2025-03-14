@@ -27,7 +27,7 @@ bot.onText(/\/lichhoc/, async (msg) => {
 
     try {
         const browser = await puppeteer.launch({
-            executablePath: '/usr/bin/google-chrome-stable', // Dùng Chrome có sẵn trên Render
+            executablePath: '/usr/bin/chromium-browser',
             headless: true,
             args: ['--no-sandbox', '--disable-setuid-sandbox']
         });
