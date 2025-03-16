@@ -7,10 +7,21 @@ const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const app = express();
 const bot = new TelegramBot(TOKEN);
 
-// Webhook endpoint
+// Webhook endpoint với kiểm tra lỗi
 app.post(`/bot${TOKEN}`, (req, res) => {
-    bot.processUpdate(req.body);
-    res.sendStatus(200);
+    const update = req.body;
+    // Kiểm tra xem update có hợp lệ không
+    if (!update || (!update.message && !update.callback_query && !update.inline_query)) {
+        console.error("Dữ liệu update không hợp lệ:", update);
+        return res.sendStatus(400); // Trả về lỗi nếu update không hợp lệ
+    }
+    try {
+        bot.processUpdate(update);
+        res.sendStatus(200);
+    } catch (error) {
+        console.error("Lỗi khi xử lý update:", error);
+        res.sendStatus(500);
+    }
 });
 
 // Ping endpoint để giữ bot sống
@@ -65,7 +76,15 @@ async function loginToPortal(page) {
     await retry(() => page.waitForNavigation({ timeout: 120000 }));
 }
 
-// Lệnh /lichhoc (giữ nguyên)
+// Lệnh /start để kiểm tra bot
+bot.onText(/\/start/, (msg) => {
+    const chatId = msg.chat.id;
+    bot.sendMessage(chatId, "👋 Chào bạn! Mình là bot lấy lịch học và thông báo.\n" +
+        "📅 Dùng /lichhoc để xem lịch học tuần này.\n" +
+        "🔔 Dùng /thongbao để xem danh sách thông báo.");
+});
+
+// Lệnh /lichhoc
 bot.onText(/\/lichhoc/, async (msg) => {
     const chatId = msg.chat.id;
     bot.sendMessage(chatId, "📡 Đang lấy thông tin lịch học tuần này, vui lòng chờ trong giây lát ⌛...");
@@ -194,46 +213,3 @@ bot.onText(/\/thongbao/, async (msg) => {
         }
 
         // Nhấn nút chuông để mở dropdown
-        console.log("🔔 Nhấn nút thông báo...");
-        await page.click("button.MuiIconButton-root[aria-label='Notifications']");
-
-        // Chờ dropdown hiển thị
-        console.log("⏳ Chờ dropdown thông báo hiển thị...");
-        await page.waitForSelector("div[role='menuitem']", { timeout: 5000 }).catch(() => {});
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        // Lấy danh sách thông báo
-        const notifications = await page.evaluate(() => {
-            const notificationItems = document.querySelectorAll("div[role='menuitem']");
-            if (!notificationItems.length) return [];
-
-            const result = [];
-            notificationItems.forEach(item => {
-                const text = item.innerText.trim();
-                if (text) result.push(text);
-            });
-            return result;
-        });
-
-        await browser.close();
-
-        if (notifications.length === 0) {
-            return bot.sendMessage(chatId, "🔔 Không lấy được chi tiết thông báo. Có thể cấu trúc trang đã thay đổi.");
-        }
-
-        // Format và gửi thông báo
-        let message = "🔔 *Danh sách thông báo:*\n *------------------------------------* \n";
-        notifications.forEach((notif, index) => {
-            message += `📢 *Thông báo ${index + 1}:*\n`;
-            message += `📌 ${notif}\n\n`;
-        });
-
-        bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
-    } catch (error) {
-        bot.sendMessage(chatId, "❌ Lỗi khi lấy thông báo: " + error.message);
-        console.error(error);
-        if (browser) await browser.close();
-    }
-});
-
-console.log("🤖 Bot Telegram đang chạy...");
