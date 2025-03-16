@@ -31,7 +31,7 @@ bot.onText(/\/lichhoc/, async (msg) => {
         await page.setViewport({ width: 1280, height: 720 });
 
         console.log("🔄 Truy cập trang đăng nhập...");
-        await page.goto("https://portal.vhu.edu.vn/login", { timeout: 87000 });
+        await page.goto("https://portal.vhu.edu.vn/login", { timeout: 120000 });
 
         await new Promise(resolve => setTimeout(resolve, 4500));
 
@@ -53,7 +53,7 @@ bot.onText(/\/lichhoc/, async (msg) => {
         await page.click("button[type='submit']");
 
         console.log("⌛ Đang đăng nhập...");
-        await page.waitForNavigation({ timeout: 85000 });
+        await page.waitForNavigation({ timeout: 120000 });
 
         console.log("📅 Truy cập trang lịch học...");
         await page.goto("https://portal.vhu.edu.vn/student/schedules", { timeout: 80000 });
