@@ -9,21 +9,22 @@ const app = express();
 // Thêm middleware để parse JSON body
 app.use(express.json());
 
-// Webhook endpoint với kiểm tra lỗi
+// Webhook endpoint với xử lý lỗi linh hoạt hơn
 app.post(`/bot${TOKEN}`, (req, res) => {
     const update = req.body;
-    console.log("Received update:", update); // Log dữ liệu nhận được để debug
-    // Kiểm tra xem update có hợp lệ không
-    if (!update || (!update.message && !update.callback_query && !update.inline_query)) {
-        console.error("Dữ liệu update không hợp lệ:", update);
-        return res.sendStatus(400); // Trả về lỗi nếu update không hợp lệ
+    console.log("Received update:", JSON.stringify(update, null, 2)); // Log chi tiết dữ liệu update
+    // Kiểm tra xem update có tồn tại không
+    if (!update) {
+        console.error("Dữ liệu update không tồn tại:", update);
+        // Vẫn trả về 200 để Telegram không ngừng gửi update
+        return res.sendStatus(200);
     }
     try {
         bot.processUpdate(update);
         res.sendStatus(200);
     } catch (error) {
         console.error("Lỗi khi xử lý update:", error);
-        res.sendStatus(500);
+        res.sendStatus(200); // Trả về 200 ngay cả khi có lỗi để Telegram tiếp tục gửi update
     }
 });
 
@@ -39,7 +40,7 @@ const bot = new TelegramBot(TOKEN);
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
     console.log(`Server running on port ${PORT}`);
-    const webhookUrl = `https://vhu-telegram-bot.onrender.com/bot${TOKEN}`; // Thay bằng URL thật của bạn
+    const webhookUrl = `https://vhu-telegram-bot.onrender.com/bot${TOKEN}`;
     try {
         await bot.setWebHook(webhookUrl);
         console.log(`Webhook set to ${webhookUrl}`);
