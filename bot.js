@@ -1,18 +1,31 @@
 require("dotenv").config();
 const puppeteer = require("puppeteer");
 const TelegramBot = require("node-telegram-bot-api");
+const express = require("express");
 
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
+const app = express();
 
+// Endpoint để ping giữ bot sống
+app.get("/ping", (req, res) => {
+    res.send("Bot is alive!");
+});
+
+// Chạy server Express
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
+
+// Xử lý lệnh /lichhoc (giữ nguyên code cũ của bạn)
 bot.onText(/\/lichhoc/, async (msg) => {
     const chatId = msg.chat.id;
     bot.sendMessage(chatId, "📡 Đang lấy thông tin lịch học tuần này, vui lòng chờ trong giây lát ⌛...");
 
     try {
-                const browser = await puppeteer.launch({
+        const browser = await puppeteer.launch({
             headless: true,
             args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-            // Không cần executablePath
         });
         const page = await browser.newPage();
         await page.setViewport({ width: 1280, height: 720 });
@@ -105,6 +118,9 @@ bot.onText(/\/lichhoc/, async (msg) => {
     } catch (error) {
         bot.sendMessage(chatId, "❌ Lỗi khi lấy lịch học: " + error.message);
         console.error(error);
+        if (typeof browser !== "undefined") {
+            await browser.close();
+        }
     }
 });
 
