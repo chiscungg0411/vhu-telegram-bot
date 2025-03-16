@@ -3,7 +3,7 @@ services:
     name: vhu-telegram-bot
     env: node
     plan: free
-    buildCommand: npm install && npx puppeteer browsers install chrome
+    buildCommand: apt-get update && apt-get install -y chromium-browser && npm install
     startCommand: node bot.js
     envVars:
       - key: TELEGRAM_BOT_TOKEN
@@ -12,3 +12,5 @@ services:
         sync: false
       - key: VHU_PASSWORD
         sync: false
+      - key: PUPPETEER_SKIP_DOWNLOAD
+        value: "true"
