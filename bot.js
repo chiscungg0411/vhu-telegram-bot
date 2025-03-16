@@ -9,19 +9,18 @@ bot.onText(/\/lichhoc/, async (msg) => {
     bot.sendMessage(chatId, "📡 Đang lấy thông tin lịch học tuần này, vui lòng chờ trong giây lát ⌛...");
 
     try {
-        // Cấu hình Puppeteer cho Render
-       const browser = await puppeteer.launch({
+        const browser = await puppeteer.launch({
             headless: true,
-            args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"], // Thêm flag này
-            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || "/usr/bin/chromium-browser", // Đường dẫn Chromium trên Render
+            args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+            executablePath: "/usr/lib/chromium-browser/chrome", // Đường dẫn Chromium trên Render sau khi cài bằng apt-get
         });
         const page = await browser.newPage();
-        await page.setViewport({ width: 1280, height: 720 }); // Giảm kích thước để tiết kiệm tài nguyên
+        await page.setViewport({ width: 1280, height: 720 });
 
         console.log("🔄 Truy cập trang đăng nhập...");
         await page.goto("https://portal.vhu.edu.vn/login", { timeout: 87000 });
 
-        await new Promise(resolve => setTimeout(resolve, 4500)); // Chờ trang tải
+        await new Promise(resolve => setTimeout(resolve, 4500));
 
         console.log("🔍 Kiểm tra input email...");
         const emailExists = await page.evaluate(() => !!document.querySelector("input[name='email']"));
