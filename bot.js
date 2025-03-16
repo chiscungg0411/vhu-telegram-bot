@@ -148,7 +148,7 @@ bot.onText(/\/lichhoc/, async (msg) => {
     }
 });
 
-// Lệnh /thongbao mới
+// Lệnh /thongbao (phiên bản đơn giản, chỉ lấy từ dropdown)
 bot.onText(/\/thongbao/, async (msg) => {
     const chatId = msg.chat.id;
     bot.sendMessage(chatId, "🔔 Đang lấy thông báo, vui lòng chờ trong giây lát ⌛...");
@@ -193,25 +193,24 @@ bot.onText(/\/thongbao/, async (msg) => {
             return bot.sendMessage(chatId, "🔔 Hiện tại không có thông báo nào.");
         }
 
-        // Nhấn nút chuông để mở thông báo
+        // Nhấn nút chuông để mở dropdown
         console.log("🔔 Nhấn nút thông báo...");
         await page.click("button.MuiIconButton-root[aria-label='Notifications']");
 
-        // Chờ dropdown hoặc chuyển trang
-        console.log("⏳ Chờ thông báo hiển thị...");
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        // Chờ dropdown hiển thị
+        console.log("⏳ Chờ dropdown thông báo hiển thị...");
+        await page.waitForSelector("div[role='menuitem']", { timeout: 5000 }).catch(() => {});
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
-        // Kiểm tra xem thông báo hiển thị trong dropdown hay chuyển trang
+        // Lấy danh sách thông báo
         const notifications = await page.evaluate(() => {
-            // Giả sử thông báo nằm trong một dropdown với class cụ thể (cần điều chỉnh nếu cấu trúc khác)
-            const notificationItems = document.querySelectorAll("ul.MuiList-root li"); // Thay đổi selector nếu cần
+            const notificationItems = document.querySelectorAll("div[role='menuitem']");
             if (!notificationItems.length) return [];
 
             const result = [];
             notificationItems.forEach(item => {
-                const title = item.querySelector("p")?.innerText || "Không có tiêu đề";
-                const time = item.querySelector("span")?.innerText || "Không có thời gian";
-                result.push({ title, time });
+                const text = item.innerText.trim();
+                if (text) result.push(text);
             });
             return result;
         });
@@ -226,8 +225,7 @@ bot.onText(/\/thongbao/, async (msg) => {
         let message = "🔔 *Danh sách thông báo:*\n *------------------------------------* \n";
         notifications.forEach((notif, index) => {
             message += `📢 *Thông báo ${index + 1}:*\n`;
-            message += `📌 *Tiêu đề:* ${notif.title}\n`;
-            message += `⏰ *Thời gian:* ${notif.time}\n\n`;
+            message += `📌 ${notif}\n\n`;
         });
 
         bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
