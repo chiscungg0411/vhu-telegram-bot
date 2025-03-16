@@ -66,12 +66,18 @@ async function loginToPortal(page) {
     console.log("🔄 Truy cập trang đăng nhập...");
     await retry(() => page.goto("https://portal.vhu.edu.vn/login", { timeout: 120000 }));
 
-    await new Promise(resolve => setTimeout(resolve, 4500));
+    // Tăng thời gian chờ để trang tải hoàn tất
+    console.log("⏳ Chờ trang đăng nhập tải...");
+    await new Promise(resolve => setTimeout(resolve, 7000));
 
     console.log("🔍 Kiểm tra input email...");
-    const emailExists = await page.evaluate(() => !!document.querySelector("input[name='email']"));
+    const emailExists = await page.evaluate(() => {
+        const emailInput = document.querySelector("input[name='email']") || document.querySelector("input[type='email']");
+        console.log("HTML của ô email:", emailInput ? emailInput.outerHTML : "Không tìm thấy");
+        return !!emailInput;
+    });
     if (!emailExists) {
-        throw new Error("Không tìm thấy ô nhập email!");
+        throw new Error("Không tìm thấy ô nhập email! Vui lòng kiểm tra lại selector hoặc cấu trúc trang.");
     }
 
     console.log("📩 Nhập tài khoản...");
@@ -91,7 +97,7 @@ async function loginToPortal(page) {
 bot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
     console.log("Received /start command from chat:", chatId);
-    bot.sendMessage(chatId, "👋 Xin chào! Mình là Trợ lý VHU, người luôn cập nhật thông tin nhanh nhất cho bạn <3.\n" +
+    bot.sendMessage(chatId, "👋 Xin chào! Mình là Trợ lý VHU, luôn cập nhật thông tin nhanh nhất đến cho bạn <3.\n" +
         "📅 Dùng /lichhoc để xem lịch học tuần này.\n" +
         "🔔 Dùng /thongbao để xem danh sách thông báo.");
 });
@@ -244,7 +250,7 @@ bot.onText(/\/thongbao/, async (msg) => {
         const limitedNotifications = notifications.slice(0, 5);
 
         // Format và gửi thông báo
-        let message = "🔔 *Danh sách 5 thông báo mới nhất:*\n *------------------------------------* \n";
+        let message = "🔔 *Danh sách thông báo mới nhất:*\n *------------------------------------* \n";
         limitedNotifications.forEach((notif, index) => {
             message += `📢 *Thông báo ${index + 1}:*\n`;
             message += `📌 *Tiêu đề:* ${notif.title}\n`;
@@ -252,9 +258,9 @@ bot.onText(/\/thongbao/, async (msg) => {
             message += `⏰ *Thời gian:* ${notif.date}\n\n`;
         });
 
-        // Nếu có nhiều hơn 5 thông báo, thông báo cho người dùng
+        // Nếu có nhiều hơn 5 thông báo, thông báo cho người dùng với hyperlink
         if (notifications.length > 5) {
-            message += `📢 Có thêm ${notifications.length - 5} thông báo khác. Vui lòng kiểm tra trực tiếp trên trang portal nếu cần!`;
+            message += `📢 Có thêm *${notifications.length - 5} thông báo khác*. Vui lòng kiểm tra trực tiếp trên [trang portal](https://portal.vhu.edu.vn/login) nếu cần!`;
         }
 
         bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
