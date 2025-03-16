@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: vhu-telegram-bot
+    env: node
+    plan: free
+    buildCommand: npm install && npx puppeteer browsers install chrome
+    startCommand: node bot.js
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: VHU_EMAIL
+        sync: false
+      - key: VHU_PASSWORD
+        sync: false
