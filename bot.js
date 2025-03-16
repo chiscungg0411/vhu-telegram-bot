@@ -10,9 +10,10 @@ bot.onText(/\/lichhoc/, async (msg) => {
 
     try {
         // Cấu hình Puppeteer cho Render
-        const browser = await puppeteer.launch({
+       const browser = await puppeteer.launch({
             headless: true,
-            args: ["--no-sandbox", "--disable-setuid-sandbox"], // Cần cho Linux
+            args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"], // Thêm flag này
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || "/usr/bin/chromium-browser", // Đường dẫn Chromium trên Render
         });
         const page = await browser.newPage();
         await page.setViewport({ width: 1280, height: 720 }); // Giảm kích thước để tiết kiệm tài nguyên
