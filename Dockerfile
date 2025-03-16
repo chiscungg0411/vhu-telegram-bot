@@ -1,9 +1,8 @@
 # Sử dụng image Node.js chính thức
 FROM node:18
 
-# Cài đặt Chromium và các phụ thuộc cần thiết
+# Cài đặt các phụ thuộc cần thiết cho Puppeteer (không cài Chromium vì Puppeteer sẽ tự tải)
 RUN apt-get update && apt-get install -y \
-    chromium \
     libxss1 \
     libxtst6 \
     libx11-xcb1 \
@@ -27,10 +26,6 @@ RUN npm install
 
 # Sao chép toàn bộ mã nguồn
 COPY . .
-
-# Đặt biến môi trường để Puppeteer dùng Chromium hệ thống
-ENV PUPPETEER_SKIP_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 # Chạy bot
 CMD ["node", "bot.js"]
