@@ -14,7 +14,6 @@ bot.onText(/\/lichhoc/, async (msg) => {
             args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
             // Không cần executablePath
         });
-        });
         const page = await browser.newPage();
         await page.setViewport({ width: 1280, height: 720 });
 
