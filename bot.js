@@ -3,7 +3,8 @@ const puppeteer = require("puppeteer");
 const TelegramBot = require("node-telegram-bot-api");
 const express = require("express");
 
-const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
+const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const bot = new TelegramBot(TOKEN, { polling: true });
 const app = express();
 
 // Endpoint để ping giữ bot sống
@@ -17,21 +18,49 @@ app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
 
-// Xử lý lệnh /lichhoc (giữ nguyên code cũ của bạn)
+// Xử lý lỗi polling
+bot.on("polling_error", (error) => {
+    console.error("[polling_error]", error.code, error.message);
+    if (error.code === "ETELEGRAM" && error.message.includes("409 Conflict")) {
+        console.log("🔴 Detected 409 Conflict. Stopping polling and restarting...");
+        bot.stopPolling().then(() => {
+            setTimeout(() => {
+                bot.startPolling();
+                console.log("🔄 Polling restarted.");
+            }, 2000);
+        });
+    }
+});
+
+// Xử lý lệnh /lichhoc
 bot.onText(/\/lichhoc/, async (msg) => {
     const chatId = msg.chat.id;
     bot.sendMessage(chatId, "📡 Đang lấy thông tin lịch học tuần này, vui lòng chờ trong giây lát ⌛...");
 
+    let browser;
     try {
-        const browser = await puppeteer.launch({
+        browser = await puppeteer.launch({
             headless: true,
             args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
         });
         const page = await browser.newPage();
         await page.setViewport({ width: 1280, height: 720 });
 
+        // Hàm retry với tối đa 3 lần
+        const retry = async (fn, retries = 3, delay = 5000) => {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    return await fn();
+                } catch (err) {
+                    if (i === retries - 1) throw err;
+                    console.log(`Retry ${i + 1}/${retries} after ${delay}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        };
+
         console.log("🔄 Truy cập trang đăng nhập...");
-        await page.goto("https://portal.vhu.edu.vn/login", { timeout: 120000 });
+        await retry(() => page.goto("https://portal.vhu.edu.vn/login", { timeout: 120000 }));
 
         await new Promise(resolve => setTimeout(resolve, 4500));
 
@@ -53,10 +82,10 @@ bot.onText(/\/lichhoc/, async (msg) => {
         await page.click("button[type='submit']");
 
         console.log("⌛ Đang đăng nhập...");
-        await page.waitForNavigation({ timeout: 120000 });
+        await retry(() => page.waitForNavigation({ timeout: 120000 }));
 
         console.log("📅 Truy cập trang lịch học...");
-        await page.goto("https://portal.vhu.edu.vn/student/schedules", { timeout: 80000 });
+        await retry(() => page.goto("https://portal.vhu.edu.vn/student/schedules", { timeout: 120000 }));
 
         console.log("⏳ Chờ trang tải hoàn tất...");
         await new Promise(resolve => setTimeout(resolve, 8300));
@@ -118,10 +147,19 @@ bot.onText(/\/lichhoc/, async (msg) => {
     } catch (error) {
         bot.sendMessage(chatId, "❌ Lỗi khi lấy lịch học: " + error.message);
         console.error(error);
-        if (typeof browser !== "undefined") {
-            await browser.close();
-        }
+        if (browser) await browser.close();
     }
+});
+
+// Dừng polling khi bot tắt
+process.on("SIGINT", () => {
+    console.log("🔴 Bot is shutting down...");
+    bot.stopPolling().then(() => process.exit(0));
+});
+
+process.on("SIGTERM", () => {
+    console.log("🔴 Bot is shutting down...");
+    bot.stopPolling().then(() => process.exit(0));
 });
 
 console.log("🤖 Bot Telegram đang chạy...");
