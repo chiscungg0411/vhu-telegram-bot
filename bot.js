@@ -12,7 +12,7 @@ bot.onText(/\/lichhoc/, async (msg) => {
         const browser = await puppeteer.launch({
             headless: true,
             args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || "/usr/lib/chromium-browser/chromium" // Thử đường dẫn này
+            // Không cần executablePath, để Puppeteer tự quản lý Chromium
         });
         const page = await browser.newPage();
         await page.setViewport({ width: 1280, height: 720 });
