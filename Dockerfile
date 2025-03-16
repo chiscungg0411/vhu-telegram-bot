@@ -1,7 +1,7 @@
-# Sử dụng image Node.js chính thức
-FROM node:18
+# Sử dụng image Node.js slim để giảm kích thước
+FROM node:18-slim
 
-# Cài đặt các phụ thuộc cần thiết cho Puppeteer (không cài Chromium vì Puppeteer sẽ tự tải)
+# Cài đặt chỉ các phụ thuộc tối thiểu cho Puppeteer
 RUN apt-get update && apt-get install -y \
     libxss1 \
     libxtst6 \
@@ -22,10 +22,10 @@ WORKDIR /app
 
 # Sao chép package.json và cài đặt dependencies
 COPY package.json .
-RUN npm install
+RUN npm install --production # Chỉ cài gói cần thiết để chạy
 
-# Sao chép toàn bộ mã nguồn
-COPY . .
+# Sao chép mã nguồn
+COPY bot.js .
 
 # Chạy bot
 CMD ["node", "bot.js"]
