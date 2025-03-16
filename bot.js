@@ -213,3 +213,46 @@ bot.onText(/\/thongbao/, async (msg) => {
         }
 
         // Nhấn nút chuông để mở dropdown
+        console.log("🔔 Nhấn nút thông báo...");
+        await page.click("button.MuiIconButton-root[aria-label='Notifications']");
+
+        // Chờ dropdown hiển thị
+        console.log("⏳ Chờ dropdown thông báo hiển thị...");
+        await page.waitForSelector("div[role='menuitem']", { timeout: 5000 }).catch(() => {});
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // Lấy danh sách thông báo
+        const notifications = await page.evaluate(() => {
+            const notificationItems = document.querySelectorAll("div[role='menuitem']");
+            if (!notificationItems.length) return [];
+
+            const result = [];
+            notificationItems.forEach(item => {
+                const text = item.innerText.trim();
+                if (text) result.push(text);
+            });
+            return result;
+        });
+
+        await browser.close();
+
+        if (notifications.length === 0) {
+            return bot.sendMessage(chatId, "🔔 Không lấy được chi tiết thông báo. Có thể cấu trúc trang đã thay đổi.");
+        }
+
+        // Format và gửi thông báo
+        let message = "🔔 *Danh sách thông báo:*\n *------------------------------------* \n";
+        notifications.forEach((notif, index) => {
+            message += `📢 *Thông báo ${index + 1}:*\n`;
+            message += `📌 ${notif}\n\n`;
+        });
+
+        bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+    } catch (error) {
+        bot.sendMessage(chatId, "❌ Lỗi khi lấy thông báo: " + error.message);
+        console.error(error);
+        if (browser) await browser.close();
+    }
+});
+
+console.log("🤖 Bot Telegram đang chạy...");
