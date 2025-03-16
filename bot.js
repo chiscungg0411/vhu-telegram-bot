@@ -5,11 +5,14 @@ const express = require("express");
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const app = express();
-const bot = new TelegramBot(TOKEN);
+
+// Thêm middleware để parse JSON body
+app.use(express.json());
 
 // Webhook endpoint với kiểm tra lỗi
 app.post(`/bot${TOKEN}`, (req, res) => {
     const update = req.body;
+    console.log("Received update:", update); // Log dữ liệu nhận được để debug
     // Kiểm tra xem update có hợp lệ không
     if (!update || (!update.message && !update.callback_query && !update.inline_query)) {
         console.error("Dữ liệu update không hợp lệ:", update);
@@ -29,13 +32,20 @@ app.get("/ping", (req, res) => {
     res.send("Bot is alive!");
 });
 
+// Khởi tạo bot
+const bot = new TelegramBot(TOKEN);
+
 // Chạy server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
     console.log(`Server running on port ${PORT}`);
     const webhookUrl = `https://vhu-telegram-bot.onrender.com/bot${TOKEN}`; // Thay bằng URL thật của bạn
-    await bot.setWebHook(webhookUrl);
-    console.log(`Webhook set to ${webhookUrl}`);
+    try {
+        await bot.setWebHook(webhookUrl);
+        console.log(`Webhook set to ${webhookUrl}`);
+    } catch (error) {
+        console.error("Lỗi khi thiết lập Webhook:", error);
+    }
 });
 
 // Hàm đăng nhập tái sử dụng
@@ -79,6 +89,7 @@ async function loginToPortal(page) {
 // Lệnh /start để kiểm tra bot
 bot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
+    console.log("Received /start command from chat:", chatId);
     bot.sendMessage(chatId, "👋 Chào bạn! Mình là bot lấy lịch học và thông báo.\n" +
         "📅 Dùng /lichhoc để xem lịch học tuần này.\n" +
         "🔔 Dùng /thongbao để xem danh sách thông báo.");
@@ -87,6 +98,7 @@ bot.onText(/\/start/, (msg) => {
 // Lệnh /lichhoc
 bot.onText(/\/lichhoc/, async (msg) => {
     const chatId = msg.chat.id;
+    console.log("Received /lichhoc command from chat:", chatId);
     bot.sendMessage(chatId, "📡 Đang lấy thông tin lịch học tuần này, vui lòng chờ trong giây lát ⌛...");
 
     let browser;
@@ -170,6 +182,7 @@ bot.onText(/\/lichhoc/, async (msg) => {
 // Lệnh /thongbao (phiên bản đơn giản, chỉ lấy từ dropdown)
 bot.onText(/\/thongbao/, async (msg) => {
     const chatId = msg.chat.id;
+    console.log("Received /thongbao command from chat:", chatId);
     bot.sendMessage(chatId, "🔔 Đang lấy thông báo, vui lòng chờ trong giây lát ⌛...");
 
     let browser;
