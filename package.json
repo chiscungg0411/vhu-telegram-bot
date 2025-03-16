@@ -2,20 +2,13 @@
   "name": "vhu-telegram-bot",
   "version": "1.0.0",
   "description": "Bot Telegram lấy lịch học VHU",
-  "type": "module",
   "main": "bot.js",
   "scripts": {
-  "postinstall": "NODE_ENV=production npx puppeteer browsers install chrome --download-host=https://storage.googleapis.com",
-  "start": "node bot.js"
-},
-  "engines": {
-    "node": "20.x"
+    "start": "node bot.js"
   },
   "dependencies": {
-    "dotenv": "^16.4.7",
-    "fs-extra": "^11.3.0",
-    "isomorphic-fetch": "^3.0.0",
+    "dotenv": "^16.0.3",
     "node-telegram-bot-api": "^0.66.0",
-    "puppeteer": "^21.3.0"
+    "puppeteer": "^24.4.0"
   }
 }
