@@ -180,7 +180,7 @@ bot.onText(/\/lichhoc/, async (msg) => {
     }
 });
 
-// Lệnh /thongbao (phiên bản đơn giản, chỉ lấy từ dropdown)
+// Lệnh /thongbao (chỉ lấy 5 thông báo đầu tiên)
 bot.onText(/\/thongbao/, async (msg) => {
     const chatId = msg.chat.id;
     console.log("Received /thongbao command from chat:", chatId);
@@ -254,12 +254,20 @@ bot.onText(/\/thongbao/, async (msg) => {
             return bot.sendMessage(chatId, "🔔 Không lấy được chi tiết thông báo. Có thể cấu trúc trang đã thay đổi.");
         }
 
+        // Chỉ lấy 5 thông báo đầu tiên
+        const limitedNotifications = notifications.slice(0, 5);
+
         // Format và gửi thông báo
-        let message = "🔔 *Danh sách thông báo:*\n *------------------------------------* \n";
-        notifications.forEach((notif, index) => {
+        let message = "🔔 *Danh sách 5 thông báo mới nhất:*\n *------------------------------------* \n";
+        limitedNotifications.forEach((notif, index) => {
             message += `📢 *Thông báo ${index + 1}:*\n`;
             message += `📌 ${notif}\n\n`;
         });
+
+        // Nếu có nhiều hơn 5 thông báo, thông báo cho người dùng
+        if (notifications.length > 5) {
+            message += `📢 Có thêm ${notifications.length - 5} thông báo khác. Vui lòng kiểm tra trực tiếp trên trang portal nếu cần!`;
+        }
 
         bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
     } catch (error) {
