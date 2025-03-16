@@ -106,7 +106,85 @@ bot.onText(/\/lichhoc/, async (msg) => {
     try {
         browser = await puppeteer.launch({
             headless: true,
-            args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usnày, vui lòng chờ trong giây lát ⌛...");
+            args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+        });
+        const page = await browser.newPage();
+        await page.setViewport({ width: 1280, height: 720 });
+
+        await loginToPortal(page);
+
+        console.log("📅 Truy cập trang lịch học...");
+        await page.goto("https://portal.vhu.edu.vn/student/schedules", { timeout: 120000 });
+
+        console.log("⏳ Chờ trang tải hoàn tất...");
+        await new Promise(resolve => setTimeout(resolve, 8300));
+
+        console.log("📜 Kiểm tra dữ liệu lịch học...");
+        const tableExists = await page.evaluate(() => !!document.querySelector(".MuiTable-root"));
+        if (!tableExists) {
+            console.error("❌ Không tìm thấy bảng lịch học!");
+            await browser.close();
+            return bot.sendMessage(chatId, "❌ Không tìm thấy lịch học. Vui lòng kiểm tra lại hệ thống.");
+        }
+
+        console.log("✅ Lấy dữ liệu lịch học thành công.");
+        const lichHoc = await page.evaluate(() => {
+            const ngayHoc = [];
+            const monHocTheoNgay = {};
+
+            const headers = document.querySelectorAll(".MuiTable-root thead tr th");
+            headers.forEach((th, index) => {
+                if (index > 0) {
+                    ngayHoc.push(th.innerText.trim());
+                    monHocTheoNgay[th.innerText.trim()] = [];
+                }
+            });
+
+            const bodyRows = document.querySelectorAll(".MuiTable-root tbody tr");
+            bodyRows.forEach((row) => {
+                const columns = row.querySelectorAll("td");
+                columns.forEach((col, colIndex) => {
+                    if (colIndex > 0 && col.innerText.trim()) {
+                        monHocTheoNgay[ngayHoc[colIndex - 1]].push(col.innerText.trim());
+                    }
+                });
+            });
+
+            return monHocTheoNgay;
+        });
+
+        await browser.close();
+
+        if (Object.keys(lichHoc).length === 0) {
+            bot.sendMessage(chatId, "❌ Không tìm thấy lịch học.");
+        } else {
+            let message = "📅 *Lịch học tuần này của bạn:*\n *------------------------------------* \n";
+            Object.entries(lichHoc).forEach(([ngay, monHocs]) => {
+                message += `📌 *Ngày:* ${ngay}\n`;
+                if (monHocs.length > 0) {
+                    monHocs.forEach((monHoc) => {
+                        message += `📖 *Phòng học - Môn học:* ${monHoc}\n\n`;
+                    });
+                } else {
+                    message += "❌ Không có lịch học.\n";
+                }
+                message += "\n";
+            });
+
+            bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+        }
+    } catch (error) {
+        bot.sendMessage(chatId, "❌ Lỗi khi lấy lịch học: " + error.message);
+        console.error(error);
+        if (browser) await browser.close();
+    }
+});
+
+// Lệnh /thongbao (chỉ lấy 5 thông báo đầu tiên từ bảng)
+bot.onText(/\/thongbao/, async (msg) => {
+    const chatId = msg.chat.id;
+    console.log("Received /thongbao command from chat:", chatId);
+    bot.sendMessage(chatId, "🔔 Đang lấy thông báo, vui lòng chờ trong giây lát ⌛...");
 
     let browser;
     try {
