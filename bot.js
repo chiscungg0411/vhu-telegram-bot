@@ -9,10 +9,11 @@ bot.onText(/\/lichhoc/, async (msg) => {
     bot.sendMessage(chatId, "📡 Đang lấy thông tin lịch học tuần này, vui lòng chờ trong giây lát ⌛...");
 
     try {
-        const browser = await puppeteer.launch({
+                const browser = await puppeteer.launch({
             headless: true,
             args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-            // Không cần executablePath, Puppeteer sẽ tự tìm Chromium
+            // Không cần executablePath
+        });
         });
         const page = await browser.newPage();
         await page.setViewport({ width: 1280, height: 720 });
