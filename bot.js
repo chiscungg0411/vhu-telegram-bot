@@ -91,9 +91,9 @@ async function loginToPortal(page) {
 bot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
     console.log("Received /start command from chat:", chatId);
-    bot.sendMessage(chatId, "👋 Chào bạn! Mình là bot lấy lịch học và thông báo.\n" +
+    bot.sendMessage(chatId, "👋 Xin chào! Mình là Chatbot VHU. Luôn cập nhật thông tin nhanh nhất dành cho bạn <3\n" +
         "📅 Dùng /lichhoc để xem lịch học tuần này.\n" +
-        "🔔 Dùng /thongbao để xem danh sách thông báo.");
+        "🔔 Dùng /thongbao để xem danh sách thông báo tuần này.");
 });
 
 // Lệnh /lichhoc
@@ -104,87 +104,7 @@ bot.onText(/\/lichhoc/, async (msg) => {
 
     let browser;
     try {
-        browser = await puppeteer.launch({
-            headless: true,
-            args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-        });
-        const page = await browser.newPage();
-        await page.setViewport({ width: 1280, height: 720 });
-
-        await loginToPortal(page);
-
-        console.log("📅 Truy cập trang lịch học...");
-        await page.goto("https://portal.vhu.edu.vn/student/schedules", { timeout: 120000 });
-
-        console.log("⏳ Chờ trang tải hoàn tất...");
-        await new Promise(resolve => setTimeout(resolve, 8300));
-
-        console.log("📜 Kiểm tra dữ liệu lịch học...");
-        const tableExists = await page.evaluate(() => !!document.querySelector(".MuiTable-root"));
-        if (!tableExists) {
-            console.error("❌ Không tìm thấy bảng lịch học!");
-            await browser.close();
-            return bot.sendMessage(chatId, "❌ Không tìm thấy lịch học. Vui lòng kiểm tra lại hệ thống.");
-        }
-
-        console.log("✅ Lấy dữ liệu lịch học thành công.");
-        const lichHoc = await page.evaluate(() => {
-            const ngayHoc = [];
-            const monHocTheoNgay = {};
-
-            const headers = document.querySelectorAll(".MuiTable-root thead tr th");
-            headers.forEach((th, index) => {
-                if (index > 0) {
-                    ngayHoc.push(th.innerText.trim());
-                    monHocTheoNgay[th.innerText.trim()] = [];
-                }
-            });
-
-            const bodyRows = document.querySelectorAll(".MuiTable-root tbody tr");
-            bodyRows.forEach((row) => {
-                const columns = row.querySelectorAll("td");
-                columns.forEach((col, colIndex) => {
-                    if (colIndex > 0 && col.innerText.trim()) {
-                        monHocTheoNgay[ngayHoc[colIndex - 1]].push(col.innerText.trim());
-                    }
-                });
-            });
-
-            return monHocTheoNgay;
-        });
-
-        await browser.close();
-
-        if (Object.keys(lichHoc).length === 0) {
-            bot.sendMessage(chatId, "❌ Không tìm thấy lịch học.");
-        } else {
-            let message = "📅 *Lịch học tuần này của bạn:*\n *------------------------------------* \n";
-            Object.entries(lichHoc).forEach(([ngay, monHocs]) => {
-                message += `📌 *Ngày:* ${ngay}\n`;
-                if (monHocs.length > 0) {
-                    monHocs.forEach((monHoc) => {
-                        message += `📖 *Phòng học - Môn học:* ${monHoc}\n\n`;
-                    });
-                } else {
-                    message += "❌ Không có lịch học.\n";
-                }
-                message += "\n";
-            });
-
-            bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
-        }
-    } catch (error) {
-        bot.sendMessage(chatId, "❌ Lỗi khi lấy lịch học: " + error.message);
-        console.error(error);
-        if (browser) await browser.close();
-    }
-});
-
-// Lệnh /thongbao (chỉ lấy 5 thông báo đầu tiên)
-bot.onText(/\/thongbao/, async (msg) => {
-    const chatId = msg.chat.id;
-    console.log("Received /thongbao command from chat:", chatId);
-    bot.sendMessage(chatId, "🔔 Đang lấy thông báo, vui lòng chờ trong giây lát ⌛...");
+        browser = anày, vui lòng chờ trong giây lát ⌛...");
 
     let browser;
     try {
@@ -232,18 +152,21 @@ bot.onText(/\/thongbao/, async (msg) => {
 
         // Chờ dropdown hiển thị
         console.log("⏳ Chờ dropdown thông báo hiển thị...");
-        await page.waitForSelector("div[role='menuitem']", { timeout: 5000 }).catch(() => {});
+        await page.waitForSelector("ul.MuiList-root", { timeout: 5000 }).catch(() => {});
         await new Promise(resolve => setTimeout(resolve, 2000));
 
         // Lấy danh sách thông báo
         const notifications = await page.evaluate(() => {
-            const notificationItems = document.querySelectorAll("div[role='menuitem']");
+            const notificationItems = document.querySelectorAll("ul.MuiList-root li.MuiListItem-root");
             if (!notificationItems.length) return [];
 
             const result = [];
             notificationItems.forEach(item => {
-                const text = item.innerText.trim();
-                if (text) result.push(text);
+                const textElement = item.querySelector("p.MuiTypography-root.MuiTypography-body2.MuiListItemText-secondary");
+                if (textElement) {
+                    const text = textElement.innerText.trim();
+                    if (text) result.push(text);
+                }
             });
             return result;
         });
@@ -251,14 +174,14 @@ bot.onText(/\/thongbao/, async (msg) => {
         await browser.close();
 
         if (notifications.length === 0) {
-            return bot.sendMessage(chatId, "🔔 Không lấy được chi tiết thông báo. Có thể cấu trúc trang đã thay đổi.");
+            return bot.sendMessage(chatId, "🔔 Không lấy được chi tiết thông báo. Hãy thử lại.");
         }
 
         // Chỉ lấy 5 thông báo đầu tiên
         const limitedNotifications = notifications.slice(0, 5);
 
         // Format và gửi thông báo
-        let message = "🔔 *Danh sách 5 thông báo mới nhất:*\n *------------------------------------* \n";
+        let message = "🔔 *Danh sách thông báo mới nhất:*\n *------------------------------------* \n";
         limitedNotifications.forEach((notif, index) => {
             message += `📢 *Thông báo ${index + 1}:*\n`;
             message += `📌 ${notif}\n\n`;
