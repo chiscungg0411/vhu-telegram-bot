@@ -12,7 +12,7 @@ bot.onText(/\/lichhoc/, async (msg) => {
         const browser = await puppeteer.launch({
             headless: true,
             args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-            executablePath: "/usr/lib/chromium-browser/chrome", // Đường dẫn Chromium trên Render sau khi cài bằng apt-get
+            executablePath: "/usr/bin/chromium-browser", // Đường dẫn Chromium trên Render sau khi cài bằng apt-get
         });
         const page = await browser.newPage();
         await page.setViewport({ width: 1280, height: 720 });
