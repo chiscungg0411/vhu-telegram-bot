@@ -120,7 +120,6 @@ async function getSchedule(page, weekType) {
     }
 
     if (!tableLoaded) {
-        // Ghi lại nội dung trang để debug
         const pageContent = await page.content();
         console.log("Nội dung trang khi không tìm thấy selector:", pageContent);
         throw new Error("Không thể tìm thấy bảng lịch học sau nhiều lần thử.");
@@ -151,20 +150,28 @@ async function getSchedule(page, weekType) {
         const ngayHoc = [];
         const monHocTheoNgay = {};
 
+        // Lấy các header (ngày) từ hàng tiêu đề
         const headers = document.querySelectorAll(".MuiTable-root thead tr th");
         headers.forEach((th, index) => {
-            if (index > 0) {
-                ngayHoc.push(th.innerText.trim());
-                monHocTheoNgay[th.innerText.trim()] = [];
+            if (index > 0) { // Bỏ qua cột đầu tiên nếu không phải ngày
+                const text = th.innerText.trim();
+                if (text) {
+                    ngayHoc.push(text);
+                    monHocTheoNgay[text] = [];
+                }
             }
         });
 
+        // Lấy dữ liệu từ các hàng trong tbody
         const bodyRows = document.querySelectorAll(".MuiTable-root tbody tr");
         bodyRows.forEach((row) => {
             const columns = row.querySelectorAll("td");
             columns.forEach((col, colIndex) => {
-                if (colIndex > 0 && col.innerText.trim()) {
-                    monHocTheoNgay[ngayHoc[colIndex - 1]].push(col.innerText.trim());
+                if (colIndex > 0 && col.innerText.trim()) { // Bỏ qua cột đầu tiên nếu không phải dữ liệu môn học
+                    const monHoc = col.innerText.trim().split("\n").filter(item => item).join(" - "); // Ghép các dòng thành một chuỗi
+                    if (ngayHoc[colIndex - 1]) {
+                        monHocTheoNgay[ngayHoc[colIndex - 1]].push(monHoc);
+                    }
                 }
             });
         });
@@ -299,16 +306,29 @@ bot.onText(/\/thongbao/, async (msg) => {
         await page.goto("https://portal.vhu.edu.vn/student/index", { timeout: 120000 });
 
         console.log("⏳ Chờ trang tải hoàn tất...");
-        await page.waitForSelector("table.MuiTable-root", { timeout: 5000 });
-
-        console.log("🔍 Kiểm tra bảng thông báo...");
-        const tableExists = await page.evaluate(() => !!document.querySelector("table.MuiTable-root"));
-        if (!tableExists) {
-            console.error("❌ Không tìm thấy bảng thông báo!");
-            await browser.close();
-            return bot.sendMessage(chatId, "❌ Không tìm thấy bảng thông báo.");
+        let tableLoaded = false;
+        for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+                await page.waitForSelector("table.MuiTable-root", { timeout: 15000 });
+                tableLoaded = true;
+                break;
+            } catch (error) {
+                console.log(`❌ Thử lần ${attempt + 1}: Không tìm thấy selector 'table.MuiTable-root' sau 15 giây.`);
+                if (attempt < 2) {
+                    console.log("🔄 Thử lại sau 2 giây...");
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+            }
         }
 
+        if (!tableLoaded) {
+            const pageContent = await page.content();
+            console.log("Nội dung trang khi không tìm thấy selector:", pageContent);
+            await browser.close();
+            return bot.sendMessage(chatId, "❌ Không tìm thấy bảng thông báo sau nhiều lần thử.");
+        }
+
+        console.log("🔍 Kiểm tra bảng thông báo...");
         const notifications = await page.evaluate(() => {
             const notificationItems = document.querySelectorAll("table.MuiTable-root tbody tr");
             if (!notificationItems.length) return [];
@@ -380,32 +400,32 @@ bot.onText(/\/congtac/, async (msg) => {
         let tableLoaded = false;
         for (let attempt = 0; attempt < 3; attempt++) {
             try {
-                await page.waitForSelector("table.MuiTable-root", { timeout: 10000 });
+                await page.waitForSelector("table.MuiTable-root", { timeout: 15000 });
                 tableLoaded = true;
                 break;
             } catch (error) {
-                console.log(`❌ Thử lần ${attempt + 1}: Không tìm thấy selector 'table.MuiTable-root' sau 10 giây.`);
-                if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 2000));
+                console.log(`❌ Thử lần ${attempt + 1}: Không tìm thấy selector 'table.MuiTable-root' sau 15 giây.`);
+                if (attempt < 2) {
+                    console.log("🔄 Thử lại sau 2 giây...");
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
             }
         }
+
         if (!tableLoaded) {
-            throw new Error("Không thể tìm thấy bảng công tác xã hội sau nhiều lần thử.");
+            const pageContent = await page.content();
+            console.log("Nội dung trang khi không tìm thấy selector:", pageContent);
+            await browser.close();
+            return bot.sendMessage(chatId, "❌ Không tìm thấy bảng công tác xã hội sau nhiều lần thử.");
         }
 
         console.log("🔍 Kiểm tra bảng công tác xã hội...");
-        const tableExists = await page.evaluate(() => !!document.querySelector("table.MuiTable-root"));
-        if (!tableExists) {
-            console.error("❌ Không tìm thấy bảng công tác xã hội!");
-            await browser.close();
-            return bot.sendMessage(chatId, "❌ Không tìm thấy bảng công tác xã hội.");
-        }
-
         const congTacData = await page.evaluate(() => {
             const rows = document.querySelectorAll("table.MuiTable-root tbody tr");
             if (!rows.length) return [];
 
             const result = [];
-            for (let row of rows) {
+            rows.forEach(row => {
                 const columns = row.querySelectorAll("td");
                 if (columns.length >= 6) {
                     const suKien = columns[1].innerText.trim();
@@ -417,19 +437,20 @@ bot.onText(/\/congtac/, async (msg) => {
 
                     result.push({ suKien, diaDiem, soLuongDK, diem, batDau, ketThuc });
                 }
-                if (result.length >= 5) break;
-            }
+            });
             return result;
         });
 
         await browser.close();
 
         if (congTacData.length === 0) {
-            return bot.sendMessage(chatId, "📋 Không lấy được chi tiết công tác xã hội. Xin vui lòng thử lại.");
+            return bot.sendMessage(chatId, "📋 Không lấy được chi tiết công tác xã hội.");
         }
 
+        const limitedCongTacData = congTacData.slice(0, 5);
+
         let message = "📋 *Danh sách công tác xã hội:*\n *------------------------------------* \n";
-        congTacData.forEach((item, index) => {
+        limitedCongTacData.forEach((item, index) => {
             message += `📌 *Công tác ${index + 1}:*\n`;
             message += `📅 *Sự kiện:* ${item.suKien}\n`;
             message += `📍 *Địa điểm:* ${item.diaDiem}\n`;
