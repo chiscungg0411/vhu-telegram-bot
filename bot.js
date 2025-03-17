@@ -208,7 +208,7 @@ bot.onText(/\/lichhoc(?:\s+(tuầnnày|tuansau))?/i, async (msg, match) => {
 bot.onText(/\/thongbao/, async (msg) => {
     const chatId = msg.chat.id;
     console.log("Received /thongbao command from chat:", chatId);
-    bot.sendMessage(chatId, "🔔 Đang lấy thông báo, vui lòng chờ trong giây lát ⌛...");
+    bot.sendMessage(chatId, "🔔 Đang lấy danh sách thông báo, vui lòng chờ trong giây lát ⌛...");
 
     let browser;
     try {
@@ -257,12 +257,12 @@ bot.onText(/\/thongbao/, async (msg) => {
         await browser.close();
 
         if (notifications.length === 0) {
-            return bot.sendMessage(chatId, "🔔 Không lấy được chi tiết thông báo. Có thể cấu trúc trang đã thay đổi.");
+            return bot.sendMessage(chatId, "🔔 Không lấy được chi tiết thông báo.");
         }
 
         const limitedNotifications = notifications.slice(0, 5);
 
-        let message = "🔔 *Danh sách 5 thông báo mới nhất:*\n *------------------------------------* \n";
+        let message = "🔔 *Danh sách thông báo mới nhất:*\n *------------------------------------* \n";
         limitedNotifications.forEach((notif, index) => {
             message += `📢 *Thông báo ${index + 1}:*\n`;
             message += `📌 *Tiêu đề:* ${notif.title}\n`;
@@ -310,7 +310,7 @@ bot.onText(/\/congtac/, async (msg) => {
         if (!tableExists) {
             console.error("❌ Không tìm thấy bảng công tác xã hội!");
             await browser.close();
-            return bot.sendMessage(chatId, "❌ Không tìm thấy bảng công tác xã hội. Vui lòng kiểm tra lại hệ thống.");
+            return bot.sendMessage(chatId, "❌ Không tìm thấy bảng công tác xã hội.");
         }
 
         const congTacData = await page.evaluate(() => {
@@ -339,10 +339,10 @@ bot.onText(/\/congtac/, async (msg) => {
         await browser.close();
 
         if (congTacData.length === 0) {
-            return bot.sendMessage(chatId, "📋 Không lấy được chi tiết công tác xã hội. Có thể cấu trúc trang đã thay đổi.");
+            return bot.sendMessage(chatId, "📋 Không lấy được chi tiết công tác xã hội. Xin vui lòng thử lại.");
         }
 
-        let message = "📋 *Danh sách 5 công tác xã hội đầu tiên:*\n *------------------------------------* \n";
+        let message = "📋 *Danh sách công tác xã hội:*\n *------------------------------------* \n";
         congTacData.forEach((item, index) => {
             message += `📌 *Công tác ${index + 1}:*\n`;
             message += `📍 *STT:* ${item.stt}\n`;
