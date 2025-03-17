@@ -1,4 +1,3 @@
-ot Telegram đang chạy...");
 require("dotenv").config();
 const puppeteer = require("puppeteer");
 const TelegramBot = require("node-telegram-bot-api");
@@ -132,7 +131,7 @@ async function getSchedule(page, weekType) {
             }
         });
 
-        const bodyRows = document.querySelectorAll(".MuiTable-body tr");
+        const bodyRows = document.querySelectorAll(".MuiTable-root tbody tr");
         bodyRows.forEach((row) => {
             const columns = row.querySelectorAll("td");
             columns.forEach((col, colIndex) => {
