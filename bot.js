@@ -6,7 +6,7 @@ const express = require("express");
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const app = express();
 
-// Thêm middleware để parse JSON body
+// Middleware để parse JSON body
 app.use(express.json());
 
 // Webhook endpoint với xử lý lỗi linh hoạt hơn
@@ -47,9 +47,9 @@ app.listen(PORT, async () => {
     }
 });
 
-// Hàm đăng nhập tái sử dụng
+// Hàm đăng nhập tái sử dụng với thời gian chờ tối ưu
 async function loginToPortal(page) {
-    const retry = async (fn, retries = 3, delay = 5000) => {
+    const retry = async (fn, retries = 3, delay = 2000) => { // Giảm delay từ 5000ms xuống 2000ms
         for (let i = 0; i < retries; i++) {
             try {
                 return await fn();
@@ -62,125 +62,103 @@ async function loginToPortal(page) {
     };
 
     console.log("🔄 Truy cập trang đăng nhập...");
-    await retry(() => page.goto("https://portal.vhu.edu.vn/login", { timeout: 120000, waitUntil: 'networkidle2' }));
+    await retry(() => page.goto("https://portal.vhu.edu.vn/login", { timeout: 60000, waitUntil: 'domcontentloaded' })); // Giảm timeout từ 120000ms xuống 60000ms, dùng 'domcontentloaded' thay vì 'networkidle2'
 
     // Kiểm tra URL hiện tại sau khi truy cập
     const currentUrl = page.url();
     console.log("🌐 URL hiện tại sau khi truy cập:", currentUrl);
     if (!currentUrl.includes("login")) {
-        const pageContent = await page.content();
-        console.log("📄 Nội dung trang khi không ở trang đăng nhập:", pageContent);
         throw new Error("Không ở trang đăng nhập! Có thể đã bị chuyển hướng hoặc trang không tải đúng.");
     }
 
     console.log("⏳ Chờ trang đăng nhập tải...");
     let emailSelector;
     try {
-        // Thử các selector khác nhau để tìm ô nhập email
-        await page.waitForSelector("input[name='email']", { timeout: 15000 });
+        await page.waitForSelector("input[name='email']", { timeout: 5000 }); // Giảm timeout từ 15000ms xuống 5000ms
         emailSelector = "input[name='email']";
     } catch (error) {
         console.log("❌ Không tìm thấy input[name='email'], thử selector khác...");
         try {
-            await page.waitForSelector("input[type='email']", { timeout: 5000 });
+            await page.waitForSelector("input[type='email']", { timeout: 3000 }); // Giảm timeout từ 5000ms xuống 3000ms
             emailSelector = "input[type='email']";
         } catch (error) {
             console.log("❌ Không tìm thấy input[type='email'], thử selector khác...");
             try {
-                await page.waitForSelector("input[name='username']", { timeout: 5000 });
+                await page.waitForSelector("input[name='username']", { timeout: 3000 }); // Giảm timeout từ 5000ms xuống 3000ms
                 emailSelector = "input[name='username']";
             } catch (error) {
-                const pageContent = await page.content();
-                console.log("📄 Nội dung trang khi không tìm thấy selector email:", pageContent);
                 throw new Error("Không tìm thấy ô nhập email! Có thể selector đã thay đổi.");
             }
         }
     }
 
-    console.log("🔍 Kiểm tra input email...");
-    const emailExists = await page.evaluate((selector) => {
-        const emailInput = document.querySelector(selector);
-        console.log("HTML của ô email:", emailInput ? emailInput.outerHTML : "Không tìm thấy");
-        return !!emailInput;
-    }, emailSelector);
-    if (!emailExists) {
-        throw new Error("Không tìm thấy ô nhập email! Vui lòng kiểm tra lại selector hoặc cấu trúc trang.");
-    }
-
     console.log("📩 Nhập tài khoản...");
-    await page.type(emailSelector, process.env.VHU_EMAIL, { delay: 100 });
+    await page.type(emailSelector, process.env.VHU_EMAIL, { delay: 50 }); // Giảm delay từ 100ms xuống 50ms
 
     console.log("🔒 Nhập mật khẩu...");
     let passwordSelector;
     try {
-        await page.waitForSelector("input[name='password']", { timeout: 5000 });
+        await page.waitForSelector("input[name='password']", { timeout: 3000 }); // Giảm timeout từ 5000ms xuống 3000ms
         passwordSelector = "input[name='password']";
     } catch (error) {
         console.log("❌ Không tìm thấy input[name='password'], thử selector khác...");
         try {
-            await page.waitForSelector("input[type='password']", { timeout: 5000 });
+            await page.waitForSelector("input[type='password']", { timeout: 3000 }); // Giảm timeout từ 5000ms xuống 3000ms
             passwordSelector = "input[type='password']";
         } catch (error) {
-            const pageContent = await page.content();
-            console.log("📄 Nội dung trang khi không tìm thấy selector password:", pageContent);
             throw new Error("Không tìm thấy ô nhập mật khẩu! Có thể selector đã thay đổi.");
         }
     }
 
-    await page.type(passwordSelector, process.env.VHU_PASSWORD, { delay: 100 });
+    await page.type(passwordSelector, process.env.VHU_PASSWORD, { delay: 50 }); // Giảm delay từ 100ms xuống 50ms
 
     console.log("🔓 Nhấn nút đăng nhập...");
     await page.click("button[type='submit']");
 
     console.log("⌛ Đang đăng nhập...");
-    await retry(() => page.waitForNavigation({ timeout: 120000 }));
+    await retry(() => page.waitForNavigation({ timeout: 60000 })); // Giảm timeout từ 120000ms xuống 60000ms
 
     // Kiểm tra xem có đăng nhập thành công không
     const isLoggedIn = await page.evaluate(() => {
         return !document.querySelector("input[name='email']") && !document.querySelector("input[type='email']") && !document.querySelector("input[name='username']");
     });
     if (!isLoggedIn) {
-        const pageContent = await page.content();
-        console.log("📄 Nội dung trang sau khi đăng nhập thất bại:", pageContent);
         throw new Error("Đăng nhập thất bại! Vui lòng kiểm tra email và mật khẩu hoặc xem log để kiểm tra CAPTCHA.");
     }
 }
 
-// Hàm lấy lịch học theo tuần
+// Hàm lấy lịch học theo tuần với thời gian chờ tối ưu
 async function getSchedule(page, weekType) {
     console.log(`📅 Truy cập trang lịch học cho ${weekType}...`);
-    await page.goto("https://portal.vhu.edu.vn/student/schedules", { timeout: 120000, waitUntil: 'networkidle2' });
+    await page.goto("https://portal.vhu.edu.vn/student/schedules", { timeout: 60000, waitUntil: 'domcontentloaded' }); // Giảm timeout từ 120000ms xuống 60000ms
 
     // Kiểm tra URL
     const currentUrl = page.url();
-    console.log("🌐 URL hiện tại:", currentUrl);
     if (!currentUrl.includes("schedules")) {
-        const pageContent = await page.content();
-        console.log("📄 Nội dung trang:", pageContent);
         throw new Error("Không ở trang lịch học! Có thể bị chuyển hướng.");
     }
 
     // Chờ trang tải
     console.log("⏳ Chờ trang tải hoàn tất...");
-    await page.waitForSelector(".MuiGrid-root", { timeout: 30000 });
+    await page.waitForSelector(".MuiGrid-root", { timeout: 15000 }); // Giảm timeout từ 30000ms xuống 15000ms
 
     // Chọn năm học và học kỳ
     console.log("🔄 Chọn năm học và học kỳ...");
     try {
         const yearDropdownSelector = 'div[role="button"][id="demo-simple-select-helper"]';
-        await page.waitForSelector(yearDropdownSelector, { timeout: 10000 });
+        await page.waitForSelector(yearDropdownSelector, { timeout: 5000 }); // Giảm timeout từ 10000ms xuống 5000ms
         await page.click(yearDropdownSelector);
 
-        await page.waitForSelector('ul[role="listbox"]', { timeout: 5000 });
+        await page.waitForSelector('ul[role="listbox"]', { timeout: 3000 }); // Giảm timeout từ 5000ms xuống 3000ms
         await page.click('li[data-value="2024-2025"]');
 
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Chờ dropdown đóng
+        await new Promise(resolve => setTimeout(resolve, 500)); // Giảm từ 1000ms xuống 500ms
 
         const dropdowns = await page.$$(yearDropdownSelector);
         if (dropdowns.length < 2) throw new Error("Không đủ dropdown (Năm học và Học kỳ).");
         await dropdowns[1].click(); // Chọn học kỳ
 
-        await page.waitForSelector('ul[role="listbox"]', { timeout: 5000 });
+        await page.waitForSelector('ul[role="listbox"]', { timeout: 3000 }); // Giảm timeout từ 5000ms xuống 3000ms
         const semesterOptions = await page.evaluate(() => {
             return Array.from(document.querySelectorAll('ul[role="listbox"] li')).map(option => ({
                 text: option.innerText.trim(),
@@ -198,18 +176,16 @@ async function getSchedule(page, weekType) {
     let tableLoaded = false;
     for (let attempt = 0; attempt < 3; attempt++) {
         try {
-            await page.waitForSelector(".MuiTable-root", { timeout: 30000 });
+            await page.waitForSelector(".MuiTable-root", { timeout: 15000 }); // Giảm timeout từ 30000ms xuống 15000ms
             tableLoaded = true;
             break;
         } catch (error) {
-            console.log(`❌ Thử lần ${attempt + 1}: Không tìm thấy bảng sau 30 giây.`);
-            if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 5000));
+            console.log(`❌ Thử lần ${attempt + 1}: Không tìm thấy bảng sau 15 giây.`);
+            if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 2000)); // Giảm từ 5000ms xuống 2000ms
         }
     }
 
     if (!tableLoaded) {
-        const pageContent = await page.content();
-        console.log("📄 Nội dung trang khi lỗi:", pageContent);
         throw new Error("Không thể tìm thấy bảng lịch học sau nhiều lần thử.");
     }
 
@@ -268,7 +244,6 @@ bot.onText(/\/tuannay/, async (msg) => {
         await page.setViewport({ width: 1280, height: 720 });
 
         await loginToPortal(page);
-
         const lichHoc = await getSchedule(page, "tuannay");
 
         await browser.close();
@@ -288,7 +263,6 @@ bot.onText(/\/tuannay/, async (msg) => {
                 }
                 message += "\n";
             });
-
             bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
         }
     } catch (error) {
@@ -313,7 +287,6 @@ bot.onText(/\/tuansau/, async (msg) => {
         await page.setViewport({ width: 1280, height: 720 });
 
         await loginToPortal(page);
-
         const lichHoc = await getSchedule(page, "tuansau");
 
         await browser.close();
@@ -333,7 +306,6 @@ bot.onText(/\/tuansau/, async (msg) => {
                 }
                 message += "\n";
             });
-
             bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
         }
     } catch (error) {
@@ -361,28 +333,22 @@ bot.onText(/\/thongbao/, async (msg) => {
         await loginToPortal(page);
 
         console.log("📬 Truy cập trang thông báo...");
-        await page.goto("https://portal.vhu.edu.vn/student/index", { timeout: 120000 });
+        await page.goto("https://portal.vhu.edu.vn/student/index", { timeout: 60000, waitUntil: 'domcontentloaded' }); // Giảm timeout từ 120000ms xuống 60000ms
 
         console.log("⏳ Chờ trang tải hoàn tất...");
         let tableLoaded = false;
         for (let attempt = 0; attempt < 3; attempt++) {
             try {
-                await page.waitForSelector("table.MuiTable-root", { timeout: 15000 });
+                await page.waitForSelector("table.MuiTable-root", { timeout: 10000 }); // Giảm timeout từ 15000ms xuống 10000ms
                 tableLoaded = true;
                 break;
             } catch (error) {
-                console.log(`❌ Thử lần ${attempt + 1}: Không tìm thấy selector 'table.MuiTable-root' sau 15 giây.`);
-                if (attempt < 2) {
-                    console.log("🔄 Thử lại sau 2 giây...");
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                }
+                console.log(`❌ Thử lần ${attempt + 1}: Không tìm thấy selector sau 10 giây.`);
+                if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 1000)); // Giảm từ 2000ms xuống 1000ms
             }
         }
 
         if (!tableLoaded) {
-            const pageContent = await page.content();
-            console.log("Nội dung trang khi không tìm thấy selector:", pageContent);
-            await browser.close();
             return bot.sendMessage(chatId, "❌ Không tìm thấy bảng thông báo sau nhiều lần thử.");
         }
 
@@ -390,7 +356,6 @@ bot.onText(/\/thongbao/, async (msg) => {
         const notifications = await page.evaluate(() => {
             const notificationItems = document.querySelectorAll("table.MuiTable-root tbody tr");
             if (!notificationItems.length) return [];
-
             const result = [];
             notificationItems.forEach(row => {
                 const titleElement = row.querySelector("td a.css-1qeq5on");
@@ -413,7 +378,6 @@ bot.onText(/\/thongbao/, async (msg) => {
         }
 
         const limitedNotifications = notifications.slice(0, 5);
-
         let message = "🔔 *Danh sách thông báo mới nhất:*\n *------------------------------------* \n";
         limitedNotifications.forEach((notif, index) => {
             message += `📢 *Thông báo ${index + 1}:*\n`;
@@ -452,67 +416,39 @@ bot.onText(/\/congtac/, async (msg) => {
         await loginToPortal(page);
 
         console.log("📋 Truy cập trang công tác xã hội...");
-        await page.goto("https://portal.vhu.edu.vn/student/congtacxahoi", { timeout: 120000, waitUntil: 'networkidle2' });
+        await page.goto("https://portal.vhu.edu.vn/student/congtacxahoi", { timeout: 60000, waitUntil: 'domcontentloaded' }); // Giảm timeout từ 120000ms xuống 60000ms
 
         console.log("⏳ Chờ trang tải hoàn tất...");
-        await page.waitForSelector(".MuiGrid-root", { timeout: 15000 });
-
-        // Log HTML của trang để kiểm tra
-        const pageContent = await page.content();
-        console.log("📄 Nội dung trang công tác xã hội:", pageContent);
+        await page.waitForSelector(".MuiGrid-root", { timeout: 10000 }); // Giảm timeout từ 15000ms xuống 10000ms
 
         // Chọn năm học
         console.log("🔄 Mở dropdown năm học...");
         let yearDropdownSelector = 'div[role="button"][id="demo-simple-select-helper"]';
-        await page.waitForSelector(yearDropdownSelector, { timeout: 10000 });
+        await page.waitForSelector(yearDropdownSelector, { timeout: 5000 }); // Giảm timeout từ 10000ms xuống 5000ms
         await page.click(yearDropdownSelector);
 
         console.log("⏳ Chờ danh sách tùy chọn năm học...");
-        await page.waitForSelector('ul[role="listbox"]', { timeout: 5000 });
-        const yearOptions = await page.evaluate(() => {
-            const options = document.querySelectorAll('ul[role="listbox"] li');
-            return Array.from(options).map(option => ({
-                text: option.innerText.trim(),
-                value: option.getAttribute('data-value')
-            }));
-        });
-        console.log("Tùy chọn năm học:", yearOptions);
-
-        console.log("🔄 Chọn năm học 2024-2025...");
-        await page.waitForSelector('li[data-value="2024-2025"]', { timeout: 5000 });
+        await page.waitForSelector('ul[role="listbox"]', { timeout: 3000 }); // Giảm timeout từ 5000ms xuống 3000ms
         await page.click('li[data-value="2024-2025"]');
 
-        // Chờ dropdown đóng lại
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 500)); // Giảm từ 1000ms xuống 500ms
 
         // Chọn học kỳ
         console.log("🔄 Mở dropdown học kỳ...");
-        let semesterDropdownSelector = 'div[role="button"][id="demo-simple-select-helper"]';
-        const dropdowns = await page.$$(semesterDropdownSelector);
-        if (dropdowns.length < 2) {
-            throw new Error("Không tìm thấy đủ dropdown trên trang! Cần ít nhất 2 dropdown (Năm học và Học kỳ).");
-        }
-        await dropdowns[1].click(); // Chọn dropdown thứ hai (Học kỳ)
+        const dropdowns = await page.$$(yearDropdownSelector);
+        if (dropdowns.length < 2) throw new Error("Không đủ dropdown (Năm học và Học kỳ).");
+        await dropdowns[1].click();
 
         console.log("⏳ Chờ danh sách tùy chọn học kỳ...");
-        await page.waitForSelector('ul[role="listbox"]', { timeout: 5000 });
+        await page.waitForSelector('ul[role="listbox"]', { timeout: 3000 }); // Giảm timeout từ 5000ms xuống 3000ms
         const semesterOptions = await page.evaluate(() => {
-            const options = document.querySelectorAll('ul[role="listbox"] li');
-            return Array.from(options).map(option => ({
+            return Array.from(document.querySelectorAll('ul[role="listbox"] li')).map(option => ({
                 text: option.innerText.trim(),
                 value: option.getAttribute('data-value')
             }));
         });
-        console.log("Tùy chọn học kỳ:", semesterOptions);
-
-        // Tìm giá trị phù hợp cho "Học kỳ 2"
-        const semesterOption = semesterOptions.find(option => option.text === "Học kỳ 2");
-        if (!semesterOption) {
-            throw new Error("Không tìm thấy tùy chọn 'Học kỳ 2' trong dropdown học kỳ.");
-        }
-
-        console.log(`🔄 Chọn học kỳ ${semesterOption.text} (data-value: ${semesterOption.value})...`);
-        await page.waitForSelector(`li[data-value="${semesterOption.value}"]`, { timeout: 5000 });
+        const semesterOption = semesterOptions.find(opt => opt.text === "Học kỳ 2");
+        if (!semesterOption) throw new Error("Không tìm thấy 'Học kỳ 2'.");
         await page.click(`li[data-value="${semesterOption.value}"]`);
 
         // Chờ bảng tải lại dữ liệu
@@ -520,59 +456,33 @@ bot.onText(/\/congtac/, async (msg) => {
         let tableLoaded = false;
         for (let attempt = 0; attempt < 3; attempt++) {
             try {
-                await page.waitForSelector("table.MuiTable-root tbody tr", { timeout: 15000 });
-                const noData = await page.evaluate(() => {
-                    const firstRow = document.querySelector("table.MuiTable-root tbody tr td");
-                    return firstRow && firstRow.innerText.trim() === "Không có dữ liệu";
-                });
-                if (noData) {
-                    throw new Error("Bảng không có dữ liệu sau khi chọn năm học và học kỳ.");
-                }
+                await page.waitForSelector("table.MuiTable-root tbody tr", { timeout: 10000 }); // Giảm timeout từ 15000ms xuống 10000ms
                 tableLoaded = true;
                 break;
             } catch (error) {
-                console.log(`❌ Thử lần ${attempt + 1}: Không tìm thấy dữ liệu trong bảng sau 15 giây.`);
-                if (attempt < 2) {
-                    console.log("🔄 Thử lại sau 2 giây...");
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                }
+                console.log(`❌ Thử lần ${attempt + 1}: Không tìm thấy bảng sau 10 giây.`);
+                if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 1000)); // Giảm từ 2000ms xuống 1000ms
             }
         }
 
         if (!tableLoaded) {
-            const pageContent = await page.content();
-            console.log("Nội dung trang khi không tìm thấy dữ liệu:", pageContent);
-            await browser.close();
-            return bot.sendMessage(chatId, "❌ Không tìm thấy bảng công tác xã hội sau nhiều lần thử.");
+            throw new Error("Không tìm thấy bảng công tác xã hội sau nhiều lần thử.");
         }
 
         console.log("🔍 Kiểm tra bảng công tác xã hội...");
-        const tableHtml = await page.evaluate(() => {
-            const table = document.querySelector("table.MuiTable-root");
-            return table ? table.outerHTML : "Không tìm thấy bảng";
-        });
-        console.log("Nội dung bảng công tác xã hội:", tableHtml);
-
         const congTacData = await page.evaluate(() => {
             const rows = document.querySelectorAll("table.MuiTable-root tbody tr");
-            if (!rows.length) {
-                console.log("Không tìm thấy hàng nào trong bảng công tác xã hội.");
-                return [];
-            }
-
+            if (!rows.length) return [];
             const result = [];
-            rows.forEach((row, rowIndex) => {
+            rows.forEach(row => {
                 const columns = row.querySelectorAll("td");
-                console.log(`Hàng ${rowIndex + 1} có ${columns.length} cột:`, Array.from(columns).map(col => col.innerText.trim()));
-
-                if (columns.length >= 7) { // Đảm bảo có đủ 7 cột: STT, Sự kiện, Địa điểm, Số lượng đăng ký, Điểm, Bắt đầu, Kết thúc
+                if (columns.length >= 7) {
                     const suKien = columns[1]?.innerText.trim() || "Không có thông tin";
                     const diaDiem = columns[2]?.innerText.trim() || "Không có thông tin";
                     const soLuongDK = columns[3]?.innerText.trim() || "Không có thông tin";
                     const diem = columns[4]?.innerText.trim() || "Không có thông tin";
                     const batDau = columns[5]?.innerText.trim() || "Không có thông tin";
                     const ketThuc = columns[6]?.innerText.trim() || "Chưa có";
-
                     result.push({ suKien, diaDiem, soLuongDK, diem, batDau, ketThuc });
                 }
             });
@@ -582,11 +492,10 @@ bot.onText(/\/congtac/, async (msg) => {
         await browser.close();
 
         if (congTacData.length === 0) {
-            return bot.sendMessage(chatId, "📋 Không có công tác xã hội nào được tìm thấy. Vui lòng kiểm tra trên trang portal.");
+            return bot.sendMessage(chatId, "📋 Không có công tác xã hội nào được tìm thấy.");
         }
 
         const limitedCongTacData = congTacData.slice(0, 5);
-
         let message = "📋 *Danh sách công tác xã hội:*\n *------------------------------------* \n";
         limitedCongTacData.forEach((item, index) => {
             message += `📌 *Công tác ${index + 1}:*\n`;
@@ -599,7 +508,7 @@ bot.onText(/\/congtac/, async (msg) => {
         });
 
         if (congTacData.length > 5) {
-            message += `📢 Có thêm *${congTacData.length - 5} công tác xã hội khác*. Vui lòng kiểm tra trực tiếp trên [trang portal](https://portal.vhu.edu.vn/congtacxahoi) nếu cần!`;
+            message += `📢 Có thêm *${congTacData.length - 5} công tác khác*. Vui lòng kiểm tra trực tiếp trên [trang portal](https://portal.vhu.edu.vn/congtacxahoi)!`;
         }
 
         bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
