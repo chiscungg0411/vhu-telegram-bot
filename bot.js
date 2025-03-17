@@ -420,20 +420,32 @@ bot.onText(/\/congtac/, async (msg) => {
         }
 
         console.log("🔍 Kiểm tra bảng công tác xã hội...");
+        const tableHtml = await page.evaluate(() => {
+            const table = document.querySelector("table.MuiTable-root");
+            return table ? table.outerHTML : "Không tìm thấy bảng";
+        });
+        console.log("Nội dung bảng công tác xã hội:", tableHtml);
+
         const congTacData = await page.evaluate(() => {
             const rows = document.querySelectorAll("table.MuiTable-root tbody tr");
-            if (!rows.length) return [];
+            if (!rows.length) {
+                console.log("Không tìm thấy hàng nào trong bảng công tác xã hội.");
+                return [];
+            }
 
             const result = [];
-            rows.forEach(row => {
+            rows.forEach((row, rowIndex) => {
                 const columns = row.querySelectorAll("td");
-                if (columns.length >= 6) {
-                    const suKien = columns[1].innerText.trim();
-                    const diaDiem = columns[2].innerText.trim();
-                    const soLuongDK = columns[3].innerText.trim();
-                    const diem = columns[4].innerText.trim();
-                    const batDau = columns[5].innerText.trim();
-                    const ketThuc = columns[6] ? columns[6].innerText.trim() : "Chưa có";
+                console.log(`Hàng ${rowIndex + 1} có ${columns.length} cột:`, Array.from(columns).map(col => col.innerText.trim()));
+
+                // Kiểm tra số lượng cột tối thiểu (ít nhất 5 cột: STT, Sự kiện, Địa điểm, Số lượng đăng ký, Điểm, Bắt đầu, Kết thúc (tùy chọn))
+                if (columns.length >= 5) {
+                    const suKien = columns[1]?.innerText.trim() || "Không có thông tin";
+                    const diaDiem = columns[2]?.innerText.trim() || "Không có thông tin";
+                    const soLuongDK = columns[3]?.innerText.trim() || "Không có thông tin";
+                    const diem = columns[4]?.innerText.trim() || "Không có thông tin";
+                    const batDau = columns[5]?.innerText.trim() || "Không có thông tin";
+                    const ketThuc = columns[6]?.innerText.trim() || "Chưa có";
 
                     result.push({ suKien, diaDiem, soLuongDK, diem, batDau, ketThuc });
                 }
@@ -444,7 +456,7 @@ bot.onText(/\/congtac/, async (msg) => {
         await browser.close();
 
         if (congTacData.length === 0) {
-            return bot.sendMessage(chatId, "📋 Không lấy được chi tiết công tác xã hội.");
+            return bot.sendMessage(chatId, "📋 Không có công tác xã hội nào được tìm thấy. Vui lòng kiểm tra trên trang portal.");
         }
 
         const limitedCongTacData = congTacData.slice(0, 5);
