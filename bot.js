@@ -215,7 +215,7 @@ bot.onText(/\/tuannay/, async (msg) => {
 
         await browser.close();
 
-        if (Object.keys(lichHoc).length === 0) {
+        if (Object.keys(l ceuxHoc).length === 0) {
             bot.sendMessage(chatId, "❌ Không tìm thấy lịch học tuần này.");
         } else {
             let message = "📅 *Lịch học tuần này của bạn:*\n *------------------------------------* \n";
@@ -401,21 +401,52 @@ bot.onText(/\/congtac/, async (msg) => {
 
         // Chọn năm học
         console.log("🔄 Mở dropdown năm học...");
-        const yearDropdown = await page.waitForSelector('div[role="button"][aria-labelledby*="demo-simple-select-helper-label"]', { timeout: 5000 });
-        await yearDropdown.click();
+        await page.waitForSelector('div[role="button"][id="demo-simple-select-helper"]:nth-child(1)', { timeout: 5000 });
+        await page.click('div[role="button"][id="demo-simple-select-helper"]:nth-child(1)');
+
+        console.log("⏳ Chờ danh sách tùy chọn năm học...");
+        await page.waitForSelector('ul[role="listbox"]', { timeout: 5000 });
+        const yearOptions = await page.evaluate(() => {
+            const options = document.querySelectorAll('ul[role="listbox"] li');
+            return Array.from(options).map(option => ({
+                text: option.innerText.trim(),
+                value: option.getAttribute('data-value')
+            }));
+        });
+        console.log("Tùy chọn năm học:", yearOptions);
 
         console.log("🔄 Chọn năm học 2024-2025...");
         await page.waitForSelector('li[data-value="2024-2025"]', { timeout: 5000 });
         await page.click('li[data-value="2024-2025"]');
 
+        // Chờ dropdown đóng lại
+        await page.waitForTimeout(1000);
+
         // Chọn học kỳ
         console.log("🔄 Mở dropdown học kỳ...");
-        const semesterDropdown = await page.waitForSelector('div[role="button"][aria-labelledby*="demo-simple-select-helper-label"]', { timeout: 5000 });
-        await semesterDropdown.click();
+        await page.waitForSelector('div[role="button"][id="demo-simple-select-helper"]:nth-child(2)', { timeout: 5000 });
+        await page.click('div[role="button"][id="demo-simple-select-helper"]:nth-child(2)');
 
-        console.log("🔄 Chọn học kỳ HK02...");
-        await page.waitForSelector('li[data-value="HK02"]', { timeout: 5000 });
-        await page.click('li[data-value="HK02"]');
+        console.log("⏳ Chờ danh sách tùy chọn học kỳ...");
+        await page.waitForSelector('ul[role="listbox"]', { timeout: 5000 });
+        const semesterOptions = await page.evaluate(() => {
+            const options = document.querySelectorAll('ul[role="listbox"] li');
+            return Array.from(options).map(option => ({
+                text: option.innerText.trim(),
+                value: option.getAttribute('data-value')
+            }));
+        });
+        console.log("Tùy chọn học kỳ:", semesterOptions);
+
+        // Tìm giá trị phù hợp cho "Học kỳ 2"
+        const semesterOption = semesterOptions.find(option => option.text === "Học kỳ 2");
+        if (!semesterOption) {
+            throw new Error("Không tìm thấy tùy chọn 'Học kỳ 2' trong dropdown học kỳ.");
+        }
+
+        console.log(`🔄 Chọn học kỳ ${semesterOption.text} (data-value: ${semesterOption.value})...`);
+        await page.waitForSelector(`li[data-value="${semesterOption.value}"]`, { timeout: 5000 });
+        await page.click(`li[data-value="${semesterOption.value}"]`);
 
         // Chờ bảng tải lại dữ liệu
         console.log("⏳ Chờ bảng công tác xã hội tải lại...");
