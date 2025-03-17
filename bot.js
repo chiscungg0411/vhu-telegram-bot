@@ -397,14 +397,39 @@ bot.onText(/\/congtac/, async (msg) => {
         await page.goto("https://portal.vhu.edu.vn/student/congtacxahoi", { timeout: 120000 });
 
         console.log("⏳ Chờ trang tải hoàn tất...");
+        await page.waitForSelector(".MuiGrid-root", { timeout: 15000 });
+
+        // Chọn năm học
+        console.log("🔄 Chọn năm học олу
+
+ 2024-2025...");
+        const yearSelector = "input[name='NamHienTai']";
+        await page.waitForSelector(yearSelector, { timeout: 5000 });
+        await page.select(yearSelector, "2024-2025");
+
+        // Chọn học kỳ
+        console.log("🔄 Chọn học kỳ Học kỳ 2...");
+        const semesterSelector = "input[name='HocKyHienTai']";
+        await page.waitForSelector(semesterSelector, { timeout: 5000 });
+        await page.select(semesterSelector, "HK02");
+
+        // Chờ bảng tải lại dữ liệu
+        console.log("⏳ Chờ bảng công tác xã hội tải lại...");
         let tableLoaded = false;
         for (let attempt = 0; attempt < 3; attempt++) {
             try {
-                await page.waitForSelector("table.MuiTable-root", { timeout: 15000 });
+                await page.waitForSelector("table.MuiTable-root tbody tr", { timeout: 15000 });
+                const noData = await page.evaluate(() => {
+                    const firstRow = document.querySelector("table.MuiTable-root tbody tr td");
+                    return firstRow && firstRow.innerText.trim() === "Không có dữ liệu";
+                });
+                if (noData) {
+                    throw new Error("Bảng không có dữ liệu sau khi chọn năm học và học kỳ.");
+                }
                 tableLoaded = true;
                 break;
             } catch (error) {
-                console.log(`❌ Thử lần ${attempt + 1}: Không tìm thấy selector 'table.MuiTable-root' sau 15 giây.`);
+                console.log(`❌ Thử lần ${attempt + 1}: Không tìm thấy dữ liệu trong bảng sau 15 giây.`);
                 if (attempt < 2) {
                     console.log("🔄 Thử lại sau 2 giây...");
                     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -414,7 +439,7 @@ bot.onText(/\/congtac/, async (msg) => {
 
         if (!tableLoaded) {
             const pageContent = await page.content();
-            console.log("Nội dung trang khi không tìm thấy selector:", pageContent);
+            console.log("Nội dung trang khi không tìm thấy dữ liệu:", pageContent);
             await browser.close();
             return bot.sendMessage(chatId, "❌ Không tìm thấy bảng công tác xã hội sau nhiều lần thử.");
         }
@@ -438,8 +463,7 @@ bot.onText(/\/congtac/, async (msg) => {
                 const columns = row.querySelectorAll("td");
                 console.log(`Hàng ${rowIndex + 1} có ${columns.length} cột:`, Array.from(columns).map(col => col.innerText.trim()));
 
-                // Kiểm tra số lượng cột tối thiểu (ít nhất 5 cột: STT, Sự kiện, Địa điểm, Số lượng đăng ký, Điểm, Bắt đầu, Kết thúc (tùy chọn))
-                if (columns.length >= 5) {
+                if (columns.length >= 7) { // Đảm bảo có đủ 7 cột: STT, Sự kiện, Địa điểm, Số lượng đăng ký, Điểm, Bắt đầu, Kết thúc
                     const suKien = columns[1]?.innerText.trim() || "Không có thông tin";
                     const diaDiem = columns[2]?.innerText.trim() || "Không có thông tin";
                     const soLuongDK = columns[3]?.innerText.trim() || "Không có thông tin";
