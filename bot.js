@@ -211,11 +211,11 @@ bot.onText(/\/tuannay/, async (msg) => {
 
         await loginToPortal(page);
 
-        const lichHoc = await getSchedule(page, "tuầnnày");
+        const lichHoc = await getSchedule(page, "tuannay");
 
         await browser.close();
 
-        if (Object.keys(l ceuxHoc).length === 0) {
+        if (Object.keys(lichHoc).length === 0) {
             bot.sendMessage(chatId, "❌ Không tìm thấy lịch học tuần này.");
         } else {
             let message = "📅 *Lịch học tuần này của bạn:*\n *------------------------------------* \n";
