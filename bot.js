@@ -1,3 +1,4 @@
+ot Telegram đang chạy...");
 require("dotenv").config();
 const puppeteer = require("puppeteer");
 const TelegramBot = require("node-telegram-bot-api");
@@ -13,10 +14,8 @@ app.use(express.json());
 app.post(`/bot${TOKEN}`, (req, res) => {
     const update = req.body;
     console.log("Received update:", JSON.stringify(update, null, 2)); // Log chi tiết dữ liệu update
-    // Kiểm tra xem update có tồn tại không
     if (!update) {
         console.error("Dữ liệu update không tồn tại:", update);
-        // Vẫn trả về 200 để Telegram không ngừng gửi update
         return res.sendStatus(200);
     }
     try {
@@ -24,7 +23,7 @@ app.post(`/bot${TOKEN}`, (req, res) => {
         res.sendStatus(200);
     } catch (error) {
         console.error("Lỗi khi xử lý update:", error);
-        res.sendStatus(200); // Trả về 200 ngay cả khi có lỗi để Telegram tiếp tục gửi update
+        res.sendStatus(200);
     }
 });
 
@@ -66,7 +65,6 @@ async function loginToPortal(page) {
     console.log("🔄 Truy cập trang đăng nhập...");
     await retry(() => page.goto("https://portal.vhu.edu.vn/login", { timeout: 120000 }));
 
-    // Tăng thời gian chờ để trang tải hoàn tất
     console.log("⏳ Chờ trang đăng nhập tải...");
     await new Promise(resolve => setTimeout(resolve, 7000));
 
@@ -101,7 +99,6 @@ async function getSchedule(page, weekType) {
     console.log("⏳ Chờ trang tải hoàn tất...");
     await new Promise(resolve => setTimeout(resolve, 8300));
 
-    // Nếu cần lịch tuần sau, click nút "Next Week"
     if (weekType === "tuansau") {
         console.log("🔄 Chuyển đến lịch tuần sau...");
         const nextWeekButtonExists = await page.evaluate(() => {
@@ -111,9 +108,7 @@ async function getSchedule(page, weekType) {
             throw new Error("Không tìm thấy nút chuyển tuần sau!");
         }
 
-        // Click nút "Next Week"
         await page.click('button.MuiButton-root:has(svg[data-testid="SkipNextIcon"])');
-        // Chờ trang tải lại sau khi click
         await new Promise(resolve => setTimeout(resolve, 3000));
     }
 
@@ -137,7 +132,7 @@ async function getSchedule(page, weekType) {
             }
         });
 
-        const bodyRows = document.querySelectorAll(".MuiTable-root tbody tr");
+        const bodyRows = document.querySelectorAll(".MuiTable-body tr");
         bodyRows.forEach((row) => {
             const columns = row.querySelectorAll("td");
             columns.forEach((col, colIndex) => {
@@ -158,8 +153,9 @@ bot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
     console.log("Received /start command from chat:", chatId);
     bot.sendMessage(chatId, "👋 Xin chào! Mình là Trợ lý VHU, người luôn cập nhật thông tin nhanh nhất cho bạn <3.\n" +
-        "📅 Dùng /lichhoc [tuannay|tuansau] để xem lịch học (/lichhoc mặc định tuần này).\n" +
-        "🔔 Dùng /thongbao để xem danh sách thông báo.");
+        "📅 Dùng /lichhoc [tuầnnày|tuansau] để xem lịch học (mặc định tuần này).\n" +
+        "🔔 Dùng /thongbao để xem danh sách thông báo.\n" +
+        "📋 Dùng /congtac để xem 5 công tác xã hội đầu tiên.");
 });
 
 // Lệnh /lichhoc
@@ -209,7 +205,7 @@ bot.onText(/\/lichhoc(?:\s+(tuầnnày|tuansau))?/i, async (msg, match) => {
     }
 });
 
-// Lệnh /thongbao (chỉ lấy 5 thông báo đầu tiên từ bảng)
+// Lệnh /thongbao
 bot.onText(/\/thongbao/, async (msg) => {
     const chatId = msg.chat.id;
     console.log("Received /thongbao command from chat:", chatId);
@@ -224,17 +220,14 @@ bot.onText(/\/thongbao/, async (msg) => {
         const page = await browser.newPage();
         await page.setViewport({ width: 1280, height: 720 });
 
-        // Đăng nhập
         await loginToPortal(page);
 
-        // Truy cập trang thông báo
         console.log("📬 Truy cập trang thông báo...");
         await page.goto("https://portal.vhu.edu.vn/student/index", { timeout: 120000 });
 
         console.log("⏳ Chờ trang tải hoàn tất...");
         await new Promise(resolve => setTimeout(resolve, 5000));
 
-        // Kiểm tra bảng thông báo
         console.log("🔍 Kiểm tra bảng thông báo...");
         const tableExists = await page.evaluate(() => !!document.querySelector("table.MuiTable-root"));
         if (!tableExists) {
@@ -243,7 +236,6 @@ bot.onText(/\/thongbao/, async (msg) => {
             return bot.sendMessage(chatId, "❌ Không tìm thấy bảng thông báo. Vui lòng kiểm tra lại hệ thống.");
         }
 
-        // Lấy danh sách thông báo
         const notifications = await page.evaluate(() => {
             const notificationItems = document.querySelectorAll("table.MuiTable-root tbody tr");
             if (!notificationItems.length) return [];
@@ -269,10 +261,8 @@ bot.onText(/\/thongbao/, async (msg) => {
             return bot.sendMessage(chatId, "🔔 Không lấy được chi tiết thông báo. Có thể cấu trúc trang đã thay đổi.");
         }
 
-        // Chỉ lấy 5 thông báo đầu tiên
         const limitedNotifications = notifications.slice(0, 5);
 
-        // Format và gửi thông báo
         let message = "🔔 *Danh sách 5 thông báo mới nhất:*\n *------------------------------------* \n";
         limitedNotifications.forEach((notif, index) => {
             message += `📢 *Thông báo ${index + 1}:*\n`;
@@ -281,7 +271,6 @@ bot.onText(/\/thongbao/, async (msg) => {
             message += `⏰ *Thời gian:* ${notif.date}\n\n`;
         });
 
-        // Nếu có nhiều hơn 5 thông báo, thông báo cho người dùng với hyperlink
         if (notifications.length > 5) {
             message += `📢 Có thêm *${notifications.length - 5} thông báo khác*. Vui lòng kiểm tra trực tiếp trên [trang portal](https://portal.vhu.edu.vn/login) nếu cần!`;
         }
@@ -289,6 +278,86 @@ bot.onText(/\/thongbao/, async (msg) => {
         bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
     } catch (error) {
         bot.sendMessage(chatId, "❌ Lỗi khi lấy thông báo: " + error.message);
+        console.error(error);
+        if (browser) await browser.close();
+    }
+});
+
+// Lệnh /congtac
+bot.onText(/\/congtac/, async (msg) => {
+    const chatId = msg.chat.id;
+    console.log("Received /congtac command from chat:", chatId);
+    bot.sendMessage(chatId, "📋 Đang lấy thông tin công tác xã hội, vui lòng chờ trong giây lát ⌛...");
+
+    let browser;
+    try {
+        browser = await puppeteer.launch({
+            headless: true,
+            args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+        });
+        const page = await browser.newPage();
+        await page.setViewport({ width: 1280, height: 720 });
+
+        await loginToPortal(page);
+
+        console.log("📋 Truy cập trang công tác xã hội...");
+        await page.goto("https://portal.vhu.edu.vn/student/congtacxahoi", { timeout: 120000 });
+
+        console.log("⏳ Chờ trang tải hoàn tất...");
+        await new Promise(resolve => setTimeout(resolve, 5000));
+
+        console.log("🔍 Kiểm tra bảng công tác xã hội...");
+        const tableExists = await page.evaluate(() => !!document.querySelector("table.MuiTable-root"));
+        if (!tableExists) {
+            console.error("❌ Không tìm thấy bảng công tác xã hội!");
+            await browser.close();
+            return bot.sendMessage(chatId, "❌ Không tìm thấy bảng công tác xã hội. Vui lòng kiểm tra lại hệ thống.");
+        }
+
+        const congTacData = await page.evaluate(() => {
+            const rows = document.querySelectorAll("table.MuiTable-root tbody tr");
+            if (!rows.length) return [];
+
+            const result = [];
+            for (let row of rows) {
+                const columns = row.querySelectorAll("td");
+                if (columns.length >= 6) { // Đảm bảo có đủ cột
+                    const stt = columns[0].innerText.trim();
+                    const suKien = columns[1].innerText.trim();
+                    const diaDiem = columns[2].innerText.trim();
+                    const soLuongDK = columns[3].innerText.trim();
+                    const diem = columns[4].innerText.trim();
+                    const batDau = columns[5].innerText.trim();
+                    const ketThuc = columns[6] ? columns[6].innerText.trim() : "Chưa có";
+
+                    result.push({ stt, suKien, diaDiem, soLuongDK, diem, batDau, ketThuc });
+                }
+                if (result.length >= 5) break; // Chỉ lấy 5 dòng đầu tiên
+            }
+            return result;
+        });
+
+        await browser.close();
+
+        if (congTacData.length === 0) {
+            return bot.sendMessage(chatId, "📋 Không lấy được chi tiết công tác xã hội. Có thể cấu trúc trang đã thay đổi.");
+        }
+
+        let message = "📋 *Danh sách 5 công tác xã hội đầu tiên:*\n *------------------------------------* \n";
+        congTacData.forEach((item, index) => {
+            message += `📌 *Công tác ${index + 1}:*\n`;
+            message += `📍 *STT:* ${item.stt}\n`;
+            message += `📅 *Sự kiện:* ${item.suKien}\n`;
+            message += `📍 *Địa điểm:* ${item.diaDiem}\n`;
+            message += `👥 *Số lượng đăng ký:* ${item.soLuongDK}\n`;
+            message += `⭐ *Điểm:* ${item.diem}\n`;
+            message += `⏰ *Bắt đầu:* ${item.batDau}\n`;
+            message += `⏰ *Kết thúc:* ${item.ketThuc}\n\n`;
+        });
+
+        bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+    } catch (error) {
+        bot.sendMessage(chatId, "❌ Lỗi khi lấy công tác xã hội: " + error.message);
         console.error(error);
         if (browser) await browser.close();
     }
