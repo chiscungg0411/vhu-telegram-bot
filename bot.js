@@ -88,6 +88,14 @@ async function loginToPortal(page) {
 
     console.log("⌛ Đang đăng nhập...");
     await retry(() => page.waitForNavigation({ timeout: 120000 }));
+
+    // Kiểm tra xem có đăng nhập thành công không
+    const isLoggedIn = await page.evaluate(() => {
+        return !document.querySelector("input[name='email']"); // Nếu vẫn thấy ô email, nghĩa là đăng nhập thất bại
+    });
+    if (!isLoggedIn) {
+        throw new Error("Đăng nhập thất bại! Vui lòng kiểm tra email và mật khẩu.");
+    }
 }
 
 // Hàm lấy lịch học theo tuần
@@ -96,7 +104,27 @@ async function getSchedule(page, weekType) {
     await page.goto("https://portal.vhu.edu.vn/student/schedules", { timeout: 120000 });
 
     console.log("⏳ Chờ trang tải hoàn tất...");
-    await page.waitForSelector(".MuiTable-root", { timeout: 8300 });
+    let tableLoaded = false;
+    for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+            await page.waitForSelector(".MuiTable-root", { timeout: 15000 });
+            tableLoaded = true;
+            break;
+        } catch (error) {
+            console.log(`❌ Thử lần ${attempt + 1}: Không tìm thấy selector '.MuiTable-root' sau 15 giây.`);
+            if (attempt < 2) {
+                console.log("🔄 Thử lại sau 2 giây...");
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+        }
+    }
+
+    if (!tableLoaded) {
+        // Ghi lại nội dung trang để debug
+        const pageContent = await page.content();
+        console.log("Nội dung trang khi không tìm thấy selector:", pageContent);
+        throw new Error("Không thể tìm thấy bảng lịch học sau nhiều lần thử.");
+    }
 
     if (weekType === "tuansau") {
         console.log("🔄 Chuyển đến lịch tuần sau...");
@@ -108,7 +136,7 @@ async function getSchedule(page, weekType) {
         }
 
         await page.click('button.MuiButton-root:has(svg[data-testid="SkipNextIcon"])');
-        await page.waitForSelector(".MuiTable-root", { timeout: 3000 });
+        await page.waitForSelector(".MuiTable-root", { timeout: 5000 });
     }
 
     console.log("📜 Kiểm tra dữ liệu lịch học...");
