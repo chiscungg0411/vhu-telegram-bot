@@ -400,16 +400,22 @@ bot.onText(/\/congtac/, async (msg) => {
         await page.waitForSelector(".MuiGrid-root", { timeout: 15000 });
 
         // Chọn năm học
+        console.log("🔄 Mở dropdown năm học...");
+        const yearDropdown = await page.waitForSelector('div[role="button"][aria-labelledby*="demo-simple-select-helper-label"]', { timeout: 5000 });
+        await yearDropdown.click();
+
         console.log("🔄 Chọn năm học 2024-2025...");
-        const yearSelector = "input[name='NamHienTai']";
-        await page.waitForSelector(yearSelector, { timeout: 5000 });
-        await page.select(yearSelector, "2024-2025");
+        await page.waitForSelector('li[data-value="2024-2025"]', { timeout: 5000 });
+        await page.click('li[data-value="2024-2025"]');
 
         // Chọn học kỳ
-        console.log("🔄 Chọn học kỳ Học kỳ 2...");
-        const semesterSelector = "input[name='HocKyHienTai']";
-        await page.waitForSelector(semesterSelector, { timeout: 5000 });
-        await page.select(semesterSelector, "HK02");
+        console.log("🔄 Mở dropdown học kỳ...");
+        const semesterDropdown = await page.waitForSelector('div[role="button"][aria-labelledby*="demo-simple-select-helper-label"]', { timeout: 5000 });
+        await semesterDropdown.click();
+
+        console.log("🔄 Chọn học kỳ HK02...");
+        await page.waitForSelector('li[data-value="HK02"]', { timeout: 5000 });
+        await page.click('li[data-value="HK02"]');
 
         // Chờ bảng tải lại dữ liệu
         console.log("⏳ Chờ bảng công tác xã hội tải lại...");
