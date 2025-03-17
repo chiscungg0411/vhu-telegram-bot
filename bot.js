@@ -151,136 +151,85 @@ async function getSchedule(page, weekType) {
     console.log(`📅 Truy cập trang lịch học cho ${weekType}...`);
     await page.goto("https://portal.vhu.edu.vn/student/schedules", { timeout: 120000, waitUntil: 'networkidle2' });
 
+    // Kiểm tra URL
+    const currentUrl = page.url();
+    console.log("🌐 URL hiện tại:", currentUrl);
+    if (!currentUrl.includes("schedules")) {
+        const pageContent = await page.content();
+        console.log("📄 Nội dung trang:", pageContent);
+        throw new Error("Không ở trang lịch học! Có thể bị chuyển hướng.");
+    }
+
+    // Chờ trang tải
     console.log("⏳ Chờ trang tải hoàn tất...");
+    await page.waitForSelector(".MuiGrid-root", { timeout: 30000 });
+
+    // Chọn năm học và học kỳ
+    console.log("🔄 Chọn năm học và học kỳ...");
+    try {
+        const yearDropdownSelector = 'div[role="button"][id="demo-simple-select-helper"]';
+        await page.waitForSelector(yearDropdownSelector, { timeout: 10000 });
+        await page.click(yearDropdownSelector);
+
+        await page.waitForSelector('ul[role="listbox"]', { timeout: 5000 });
+        await page.click('li[data-value="2024-2025"]');
+
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Chờ dropdown đóng
+
+        const dropdowns = await page.$$(yearDropdownSelector);
+        if (dropdowns.length < 2) throw new Error("Không đủ dropdown (Năm học và Học kỳ).");
+        await dropdowns[1].click(); // Chọn học kỳ
+
+        await page.waitForSelector('ul[role="listbox"]', { timeout: 5000 });
+        const semesterOptions = await page.evaluate(() => {
+            return Array.from(document.querySelectorAll('ul[role="listbox"] li')).map(option => ({
+                text: option.innerText.trim(),
+                value: option.getAttribute('data-value')
+            }));
+        });
+        const semesterOption = semesterOptions.find(opt => opt.text === "Học kỳ 2");
+        if (!semesterOption) throw new Error("Không tìm thấy 'Học kỳ 2'.");
+        await page.click(`li[data-value="${semesterOption.value}"]`);
+    } catch (error) {
+        console.log("❌ Lỗi khi chọn năm học/học kỳ:", error.message);
+    }
+
+    // Chờ bảng lịch học
     let tableLoaded = false;
     for (let attempt = 0; attempt < 3; attempt++) {
         try {
-            await page.waitForSelector(".MuiTable-root", { timeout: 15000 });
+            await page.waitForSelector(".MuiTable-root", { timeout: 30000 });
             tableLoaded = true;
             break;
         } catch (error) {
-            console.log(`❌ Thử lần ${attempt + 1}: Không tìm thấy selector '.MuiTable-root' sau 15 giây.`);
-            if (attempt < 2) {
-                console.log("🔄 Thử lại sau 2 giây...");
-                await new Promise(resolve => setTimeout(resolve, 2000));
-            }
+            console.log(`❌ Thử lần ${attempt + 1}: Không tìm thấy bảng sau 30 giây.`);
+            if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 5000));
         }
     }
 
     if (!tableLoaded) {
         const pageContent = await page.content();
-        console.log("Nội dung trang khi không tìm thấy selector:", pageContent);
+        console.log("📄 Nội dung trang khi lỗi:", pageContent);
         throw new Error("Không thể tìm thấy bảng lịch học sau nhiều lần thử.");
     }
 
-    // Kiểm tra tuần hiện tại trên giao diện
-    console.log("🔍 Kiểm tra tuần hiện tại...");
-    const currentWeek = await page.evaluate(() => {
-        const weekElement = document.querySelector('button.MuiButtonBase-root.MuiIconButton-root.MuiIconButton-sizeLarge.css-1qhxh7k-MuiButtonBase-root-MuiIconButton-root');
-        return weekElement ? weekElement.innerText.trim() : "Không tìm thấy tuần";
-    });
-    console.log(`📅 Tuần hiện tại trên giao diện: ${currentWeek}`);
-
-    // Điều chỉnh tuần nếu cần
-    const today = new Date('2025-03-17'); // Ngày hiện tại (17/03/2025)
-    const todayDayOfWeek = today.getDay() || 7; // Chuyển Chủ nhật (0) thành 7
-    const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() - (todayDayOfWeek - 1)); // Ngày đầu tuần (Thứ 2)
-
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 6); // Ngày cuối tuần (Chủ nhật)
-
-    const formatDate = (date) => {
-        const day = String(date.getDate()).padStart(2, '0');
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const year = date.getFullYear();
-        return `${day}/${month}/${year}`;
-    };
-
-    let targetStartDate, targetEndDate;
-    if (weekType === "tuannay") {
-        targetStartDate = new Date(startOfWeek);
-        targetEndDate = new Date(endOfWeek);
-    } else if (weekType === "tuansau") {
-        targetStartDate = new Date(startOfWeek);
-        targetStartDate.setDate(startOfWeek.getDate() + 7);
-        targetEndDate = new Date(endOfWeek);
-        targetEndDate.setDate(endOfWeek.getDate() + 7);
-    }
-
-    console.log(`📅 Mục tiêu: Từ ${formatDate(targetStartDate)} đến ${formatDate(targetEndDate)}`);
-
-    // Điều chỉnh tuần trên giao diện
-    let currentStartDate = await page.evaluate(() => {
-        const firstDayElement = document.querySelector(".MuiTable-root thead tr th:nth-child(2)");
-        return firstDayElement ? firstDayElement.innerText.match(/\d{2}\/\d{2}\/\d{4}/)?.[0] : null;
-    });
-    console.log(`📅 Ngày đầu tuần trên giao diện: ${currentStartDate}`);
-
-    if (currentStartDate) {
-        const [currentDay, currentMonth, currentYear] = currentStartDate.split('/').map(Number);
-        const currentStart = new Date(currentYear, currentMonth - 1, currentDay);
-
-        const targetStartStr = formatDate(targetStartDate);
-        while (currentStartDate !== targetStartStr) {
-            if (currentStart < targetStartDate) {
-                console.log("🔄 Nhấn nút 'Tuần sau'...");
-                await page.click('button.MuiButton-root:has(svg[data-testid="SkipNextIcon"])');
-            } else {
-                console.log("🔄 Nhấn nút 'Tuần trước'...");
-                await page.click('button.MuiButton-root:has(svg[data-testid="SkipPreviousIcon"])');
-            }
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            currentStartDate = await page.evaluate(() => {
-                const firstDayElement = document.querySelector(".MuiTable-root thead tr th:nth-child(2)");
-                return firstDayElement ? firstDayElement.innerText.match(/\d{2}\/\d{2}\/\d{4}/)?.[0] : null;
-            });
-            console.log(`📅 Ngày đầu tuần sau khi điều chỉnh: ${currentStartDate}`);
-        }
-    }
-
-    console.log("📜 Kiểm tra dữ liệu lịch học...");
-    const tableExists = await page.evaluate(() => !!document.querySelector(".MuiTable-root"));
-    if (!tableExists) {
-        console.error("❌ Không tìm thấy bảng lịch học!");
-        throw new Error("Không tìm thấy bảng lịch học!");
-    }
-
-    // Log HTML của bảng để kiểm tra
-    const tableHtml = await page.evaluate(() => {
-        const table = document.querySelector(".MuiTable-root");
-        return table ? table.outerHTML : "Không tìm thấy bảng";
-    });
-    console.log("📄 Nội dung bảng lịch học:", tableHtml);
-
+    // Lấy dữ liệu lịch học
     console.log("✅ Lấy dữ liệu lịch học...");
     const lichHoc = await page.evaluate(() => {
-        const ngayHoc = [];
         const monHocTheoNgay = {};
-
-        // Lấy các header (ngày) từ hàng tiêu đề
-        const headers = document.querySelectorAll(".MuiTable-root thead tr th");
+        const headers = document.querySelectorAll(".MuiTable-root thead th");
         headers.forEach((th, index) => {
-            if (index > 0) { // Bỏ qua cột đầu tiên nếu không phải ngày
-                const text = th.innerText.trim();
-                if (text) {
-                    ngayHoc.push(text);
-                    monHocTheoNgay[text] = [];
-                }
-            }
+            if (index > 0) monHocTheoNgay[th.innerText.trim()] = [];
         });
 
-        // Lấy dữ liệu từ các hàng trong tbody
-        const bodyRows = document.querySelectorAll(".MuiTable-root tbody tr");
-        bodyRows.forEach((row, rowIndex) => {
-            const columns = row.querySelectorAll("td");
-            console.log(`Hàng ${rowIndex + 1} có ${columns.length} cột:`, Array.from(columns).map(col => col.innerText.trim()));
-            columns.forEach((col, colIndex) => {
-                if (colIndex > 0 && col.innerText.trim()) { // Bỏ qua cột đầu tiên nếu không phải dữ liệu môn học
-                    const monHoc = col.innerText.trim().split("\n").filter(item => item).join(" - "); // Ghép các dòng thành một chuỗi
-                    if (ngayHoc[colIndex - 1]) {
-                        monHocTheoNgay[ngayHoc[colIndex - 1]].push(monHoc);
-                    }
+        const rows = document.querySelectorAll(".MuiTable-root tbody tr");
+        rows.forEach(row => {
+            const cells = row.querySelectorAll("td");
+            cells.forEach((cell, index) => {
+                if (index > 0 && cell.innerText.trim()) {
+                    const ngay = headers[index].innerText.trim();
+                    const monHoc = cell.innerText.trim().split("\n").join(" - ");
+                    monHocTheoNgay[ngay].push(monHoc);
                 }
             });
         });
