@@ -400,9 +400,7 @@ bot.onText(/\/congtac/, async (msg) => {
         await page.waitForSelector(".MuiGrid-root", { timeout: 15000 });
 
         // Chọn năm học
-        console.log("🔄 Chọn năm học олу
-
- 2024-2025...");
+        console.log("🔄 Chọn năm học 2024-2025...");
         const yearSelector = "input[name='NamHienTai']";
         await page.waitForSelector(yearSelector, { timeout: 5000 });
         await page.select(yearSelector, "2024-2025");
