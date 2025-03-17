@@ -149,7 +149,7 @@ async function loginToPortal(page) {
 // Hàm lấy lịch học theo tuần
 async function getSchedule(page, weekType) {
     console.log(`📅 Truy cập trang lịch học cho ${weekType}...`);
-    await page.goto("https://portal.vhu.edu.vn/student/schedules", { timeout: 120000 });
+    await page.goto("https://portal.vhu.edu.vn/student/schedules", { timeout: 120000, waitUntil: 'networkidle2' });
 
     console.log("⏳ Chờ trang tải hoàn tất...");
     let tableLoaded = false;
@@ -173,17 +173,70 @@ async function getSchedule(page, weekType) {
         throw new Error("Không thể tìm thấy bảng lịch học sau nhiều lần thử.");
     }
 
-    if (weekType === "tuansau") {
-        console.log("🔄 Chuyển đến lịch tuần sau...");
-        const nextWeekButtonExists = await page.evaluate(() => {
-            return !!document.querySelector('button.MuiButton-root svg[data-testid="SkipNextIcon"]');
-        });
-        if (!nextWeekButtonExists) {
-            throw new Error("Không tìm thấy nút chuyển tuần sau!");
-        }
+    // Kiểm tra tuần hiện tại trên giao diện
+    console.log("🔍 Kiểm tra tuần hiện tại...");
+    const currentWeek = await page.evaluate(() => {
+        const weekElement = document.querySelector('button.MuiButtonBase-root.MuiIconButton-root.MuiIconButton-sizeLarge.css-1qhxh7k-MuiButtonBase-root-MuiIconButton-root');
+        return weekElement ? weekElement.innerText.trim() : "Không tìm thấy tuần";
+    });
+    console.log(`📅 Tuần hiện tại trên giao diện: ${currentWeek}`);
 
-        await page.click('button.MuiButton-root:has(svg[data-testid="SkipNextIcon"])');
-        await page.waitForSelector(".MuiTable-root", { timeout: 5000 });
+    // Điều chỉnh tuần nếu cần
+    const today = new Date('2025-03-17'); // Ngày hiện tại (17/03/2025)
+    const todayDayOfWeek = today.getDay() || 7; // Chuyển Chủ nhật (0) thành 7
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - (todayDayOfWeek - 1)); // Ngày đầu tuần (Thứ 2)
+
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6); // Ngày cuối tuần (Chủ nhật)
+
+    const formatDate = (date) => {
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        return `${day}/${month}/${year}`;
+    };
+
+    let targetStartDate, targetEndDate;
+    if (weekType === "tuannay") {
+        targetStartDate = new Date(startOfWeek);
+        targetEndDate = new Date(endOfWeek);
+    } else if (weekType === "tuansau") {
+        targetStartDate = new Date(startOfWeek);
+        targetStartDate.setDate(startOfWeek.getDate() + 7);
+        targetEndDate = new Date(endOfWeek);
+        targetEndDate.setDate(endOfWeek.getDate() + 7);
+    }
+
+    console.log(`📅 Mục tiêu: Từ ${formatDate(targetStartDate)} đến ${formatDate(targetEndDate)}`);
+
+    // Điều chỉnh tuần trên giao diện
+    let currentStartDate = await page.evaluate(() => {
+        const firstDayElement = document.querySelector(".MuiTable-root thead tr th:nth-child(2)");
+        return firstDayElement ? firstDayElement.innerText.match(/\d{2}\/\d{2}\/\d{4}/)?.[0] : null;
+    });
+    console.log(`📅 Ngày đầu tuần trên giao diện: ${currentStartDate}`);
+
+    if (currentStartDate) {
+        const [currentDay, currentMonth, currentYear] = currentStartDate.split('/').map(Number);
+        const currentStart = new Date(currentYear, currentMonth - 1, currentDay);
+
+        const targetStartStr = formatDate(targetStartDate);
+        while (currentStartDate !== targetStartStr) {
+            if (currentStart < targetStartDate) {
+                console.log("🔄 Nhấn nút 'Tuần sau'...");
+                await page.click('button.MuiButton-root:has(svg[data-testid="SkipNextIcon"])');
+            } else {
+                console.log("🔄 Nhấn nút 'Tuần trước'...");
+                await page.click('button.MuiButton-root:has(svg[data-testid="SkipPreviousIcon"])');
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            currentStartDate = await page.evaluate(() => {
+                const firstDayElement = document.querySelector(".MuiTable-root thead tr th:nth-child(2)");
+                return firstDayElement ? firstDayElement.innerText.match(/\d{2}\/\d{2}\/\d{4}/)?.[0] : null;
+            });
+            console.log(`📅 Ngày đầu tuần sau khi điều chỉnh: ${currentStartDate}`);
+        }
     }
 
     console.log("📜 Kiểm tra dữ liệu lịch học...");
@@ -193,7 +246,14 @@ async function getSchedule(page, weekType) {
         throw new Error("Không tìm thấy bảng lịch học!");
     }
 
-    console.log("✅ Lấy dữ liệu lịch học thành công.");
+    // Log HTML của bảng để kiểm tra
+    const tableHtml = await page.evaluate(() => {
+        const table = document.querySelector(".MuiTable-root");
+        return table ? table.outerHTML : "Không tìm thấy bảng";
+    });
+    console.log("📄 Nội dung bảng lịch học:", tableHtml);
+
+    console.log("✅ Lấy dữ liệu lịch học...");
     const lichHoc = await page.evaluate(() => {
         const ngayHoc = [];
         const monHocTheoNgay = {};
@@ -212,8 +272,9 @@ async function getSchedule(page, weekType) {
 
         // Lấy dữ liệu từ các hàng trong tbody
         const bodyRows = document.querySelectorAll(".MuiTable-root tbody tr");
-        bodyRows.forEach((row) => {
+        bodyRows.forEach((row, rowIndex) => {
             const columns = row.querySelectorAll("td");
+            console.log(`Hàng ${rowIndex + 1} có ${columns.length} cột:`, Array.from(columns).map(col => col.innerText.trim()));
             columns.forEach((col, colIndex) => {
                 if (colIndex > 0 && col.innerText.trim()) { // Bỏ qua cột đầu tiên nếu không phải dữ liệu môn học
                     const monHoc = col.innerText.trim().split("\n").filter(item => item).join(" - "); // Ghép các dòng thành một chuỗi
@@ -442,15 +503,20 @@ bot.onText(/\/congtac/, async (msg) => {
         await loginToPortal(page);
 
         console.log("📋 Truy cập trang công tác xã hội...");
-        await page.goto("https://portal.vhu.edu.vn/student/congtacxahoi", { timeout: 120000 });
+        await page.goto("https://portal.vhu.edu.vn/student/congtacxahoi", { timeout: 120000, waitUntil: 'networkidle2' });
 
         console.log("⏳ Chờ trang tải hoàn tất...");
         await page.waitForSelector(".MuiGrid-root", { timeout: 15000 });
 
+        // Log HTML của trang để kiểm tra
+        const pageContent = await page.content();
+        console.log("📄 Nội dung trang công tác xã hội:", pageContent);
+
         // Chọn năm học
         console.log("🔄 Mở dropdown năm học...");
-        await page.waitForSelector('div[role="button"][id="demo-simple-select-helper"]:nth-child(1)', { timeout: 5000 });
-        await page.click('div[role="button"][id="demo-simple-select-helper"]:nth-child(1)');
+        let yearDropdownSelector = 'div[role="button"][id="demo-simple-select-helper"]';
+        await page.waitForSelector(yearDropdownSelector, { timeout: 10000 });
+        await page.click(yearDropdownSelector);
 
         console.log("⏳ Chờ danh sách tùy chọn năm học...");
         await page.waitForSelector('ul[role="listbox"]', { timeout: 5000 });
@@ -472,8 +538,12 @@ bot.onText(/\/congtac/, async (msg) => {
 
         // Chọn học kỳ
         console.log("🔄 Mở dropdown học kỳ...");
-        await page.waitForSelector('div[role="button"][id="demo-simple-select-helper"]:nth-child(2)', { timeout: 5000 });
-        await page.click('div[role="button"][id="demo-simple-select-helper"]:nth-child(2)');
+        let semesterDropdownSelector = 'div[role="button"][id="demo-simple-select-helper"]';
+        const dropdowns = await page.$$(semesterDropdownSelector);
+        if (dropdowns.length < 2) {
+            throw new Error("Không tìm thấy đủ dropdown trên trang! Cần ít nhất 2 dropdown (Năm học và Học kỳ).");
+        }
+        await dropdowns[1].click(); // Chọn dropdown thứ hai (Học kỳ)
 
         console.log("⏳ Chờ danh sách tùy chọn học kỳ...");
         await page.waitForSelector('ul[role="listbox"]', { timeout: 5000 });
