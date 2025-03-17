@@ -101,12 +101,20 @@ async function getSchedule(page, weekType) {
     console.log("⏳ Chờ trang tải hoàn tất...");
     await new Promise(resolve => setTimeout(resolve, 8300));
 
-    // Giả định có bộ chọn tuần (cần điều chỉnh dựa trên HTML thực tế)
+    // Nếu cần lịch tuần sau, click nút "Next Week"
     if (weekType === "tuansau") {
         console.log("🔄 Chuyển đến lịch tuần sau...");
-        // Thêm logic chuyển tuần (ví dụ: click nút "Next Week")
-        // Hiện tại giả định, bạn cần cung cấp selector của nút "Next Week" nếu có
-        await page.click(".next-week-button-selector").catch(() => console.log("Không tìm thấy nút chuyển tuần, sử dụng tuần hiện tại."));
+        const nextWeekButtonExists = await page.evaluate(() => {
+            return !!document.querySelector('button.MuiButton-root svg[data-testid="SkipNextIcon"]');
+        });
+        if (!nextWeekButtonExists) {
+            throw new Error("Không tìm thấy nút chuyển tuần sau!");
+        }
+
+        // Click nút "Next Week"
+        await page.click('button.MuiButton-root:has(svg[data-testid="SkipNextIcon"])');
+        // Chờ trang tải lại sau khi click
+        await new Promise(resolve => setTimeout(resolve, 3000));
     }
 
     console.log("📜 Kiểm tra dữ liệu lịch học...");
@@ -144,6 +152,15 @@ async function getSchedule(page, weekType) {
 
     return lichHoc;
 }
+
+// Lệnh /start để kiểm tra bot
+bot.onText(/\/start/, (msg) => {
+    const chatId = msg.chat.id;
+    console.log("Received /start command from chat:", chatId);
+    bot.sendMessage(chatId, "👋 Xin chào! Mình là Trợ lý VHU, người luôn cập nhật thông tin nhanh nhất cho bạn <3.\n" +
+        "📅 Dùng /lichhoc [tuannay|tuansau] để xem lịch học (/lichhoc mặc định tuần này).\n" +
+        "🔔 Dùng /thongbao để xem danh sách thông báo.");
+});
 
 // Lệnh /lichhoc
 bot.onText(/\/lichhoc(?:\s+(tuầnnày|tuansau))?/i, async (msg, match) => {
