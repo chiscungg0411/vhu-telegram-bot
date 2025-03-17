@@ -93,20 +93,64 @@ async function loginToPortal(page) {
     await retry(() => page.waitForNavigation({ timeout: 120000 }));
 }
 
-// Lệnh /start để kiểm tra bot
-bot.onText(/\/start/, (msg) => {
-    const chatId = msg.chat.id;
-    console.log("Received /start command from chat:", chatId);
-    bot.sendMessage(chatId, "👋 Xin chào! Mình là Trợ lý VHU, luôn cập nhật thông tin nhanh nhất đến cho bạn <3.\n" +
-        "📅 Dùng /lichhoc để xem lịch học tuần này.\n" +
-        "🔔 Dùng /thongbao để xem danh sách thông báo.");
-});
+// Hàm lấy lịch học theo tuần
+async function getSchedule(page, weekType) {
+    console.log(`📅 Truy cập trang lịch học cho ${weekType}...`);
+    await page.goto("https://portal.vhu.edu.vn/student/schedules", { timeout: 120000 });
+
+    console.log("⏳ Chờ trang tải hoàn tất...");
+    await new Promise(resolve => setTimeout(resolve, 8300));
+
+    // Giả định có bộ chọn tuần (cần điều chỉnh dựa trên HTML thực tế)
+    if (weekType === "tuansau") {
+        console.log("🔄 Chuyển đến lịch tuần sau...");
+        // Thêm logic chuyển tuần (ví dụ: click nút "Next Week")
+        // Hiện tại giả định, bạn cần cung cấp selector của nút "Next Week" nếu có
+        await page.click(".next-week-button-selector").catch(() => console.log("Không tìm thấy nút chuyển tuần, sử dụng tuần hiện tại."));
+    }
+
+    console.log("📜 Kiểm tra dữ liệu lịch học...");
+    const tableExists = await page.evaluate(() => !!document.querySelector(".MuiTable-root"));
+    if (!tableExists) {
+        console.error("❌ Không tìm thấy bảng lịch học!");
+        throw new Error("Không tìm thấy bảng lịch học!");
+    }
+
+    console.log("✅ Lấy dữ liệu lịch học thành công.");
+    const lichHoc = await page.evaluate(() => {
+        const ngayHoc = [];
+        const monHocTheoNgay = {};
+
+        const headers = document.querySelectorAll(".MuiTable-root thead tr th");
+        headers.forEach((th, index) => {
+            if (index > 0) {
+                ngayHoc.push(th.innerText.trim());
+                monHocTheoNgay[th.innerText.trim()] = [];
+            }
+        });
+
+        const bodyRows = document.querySelectorAll(".MuiTable-root tbody tr");
+        bodyRows.forEach((row) => {
+            const columns = row.querySelectorAll("td");
+            columns.forEach((col, colIndex) => {
+                if (colIndex > 0 && col.innerText.trim()) {
+                    monHocTheoNgay[ngayHoc[colIndex - 1]].push(col.innerText.trim());
+                }
+            });
+        });
+
+        return monHocTheoNgay;
+    });
+
+    return lichHoc;
+}
 
 // Lệnh /lichhoc
-bot.onText(/\/lichhoc/, async (msg) => {
+bot.onText(/\/lichhoc(?:\s+(tuầnnày|tuansau))?/i, async (msg, match) => {
     const chatId = msg.chat.id;
     console.log("Received /lichhoc command from chat:", chatId);
-    bot.sendMessage(chatId, "📡 Đang lấy thông tin lịch học tuần này, vui lòng chờ trong giây lát ⌛...");
+    const weekType = match[1] ? match[1].toLowerCase() : "tuầnnày";
+    bot.sendMessage(chatId, `📡 Đang lấy thông tin lịch học ${weekType === "tuansau" ? "tuần sau" : "tuần này"}, vui lòng chờ trong giây lát ⌛...`);
 
     let browser;
     try {
@@ -119,52 +163,14 @@ bot.onText(/\/lichhoc/, async (msg) => {
 
         await loginToPortal(page);
 
-        console.log("📅 Truy cập trang lịch học...");
-        await page.goto("https://portal.vhu.edu.vn/student/schedules", { timeout: 120000 });
-
-        console.log("⏳ Chờ trang tải hoàn tất...");
-        await new Promise(resolve => setTimeout(resolve, 8300));
-
-        console.log("📜 Kiểm tra dữ liệu lịch học...");
-        const tableExists = await page.evaluate(() => !!document.querySelector(".MuiTable-root"));
-        if (!tableExists) {
-            console.error("❌ Không tìm thấy bảng lịch học!");
-            await browser.close();
-            return bot.sendMessage(chatId, "❌ Không tìm thấy lịch học. Vui lòng kiểm tra lại hệ thống.");
-        }
-
-        console.log("✅ Lấy dữ liệu lịch học thành công.");
-        const lichHoc = await page.evaluate(() => {
-            const ngayHoc = [];
-            const monHocTheoNgay = {};
-
-            const headers = document.querySelectorAll(".MuiTable-root thead tr th");
-            headers.forEach((th, index) => {
-                if (index > 0) {
-                    ngayHoc.push(th.innerText.trim());
-                    monHocTheoNgay[th.innerText.trim()] = [];
-                }
-            });
-
-            const bodyRows = document.querySelectorAll(".MuiTable-root tbody tr");
-            bodyRows.forEach((row) => {
-                const columns = row.querySelectorAll("td");
-                columns.forEach((col, colIndex) => {
-                    if (colIndex > 0 && col.innerText.trim()) {
-                        monHocTheoNgay[ngayHoc[colIndex - 1]].push(col.innerText.trim());
-                    }
-                });
-            });
-
-            return monHocTheoNgay;
-        });
+        const lichHoc = await getSchedule(page, weekType);
 
         await browser.close();
 
         if (Object.keys(lichHoc).length === 0) {
-            bot.sendMessage(chatId, "❌ Không tìm thấy lịch học.");
+            bot.sendMessage(chatId, `❌ Không tìm thấy lịch học ${weekType === "tuansau" ? "tuần sau" : "tuần này"}.`);
         } else {
-            let message = "📅 *Lịch học tuần này của bạn:*\n *------------------------------------* \n";
+            let message = `📅 *Lịch học ${weekType === "tuansau" ? "tuần sau" : "tuần này"} của bạn:*\n *------------------------------------* \n`;
             Object.entries(lichHoc).forEach(([ngay, monHocs]) => {
                 message += `📌 *Ngày:* ${ngay}\n`;
                 if (monHocs.length > 0) {
@@ -180,7 +186,7 @@ bot.onText(/\/lichhoc/, async (msg) => {
             bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
         }
     } catch (error) {
-        bot.sendMessage(chatId, "❌ Lỗi khi lấy lịch học: " + error.message);
+        bot.sendMessage(chatId, `❌ Lỗi khi lấy lịch học ${weekType === "tuansau" ? "tuần sau" : "tuần này"}: ${error.message}`);
         console.error(error);
         if (browser) await browser.close();
     }
@@ -250,7 +256,7 @@ bot.onText(/\/thongbao/, async (msg) => {
         const limitedNotifications = notifications.slice(0, 5);
 
         // Format và gửi thông báo
-        let message = "🔔 *Danh sách thông báo mới nhất:*\n *------------------------------------* \n";
+        let message = "🔔 *Danh sách 5 thông báo mới nhất:*\n *------------------------------------* \n";
         limitedNotifications.forEach((notif, index) => {
             message += `📢 *Thông báo ${index + 1}:*\n`;
             message += `📌 *Tiêu đề:* ${notif.title}\n`;
