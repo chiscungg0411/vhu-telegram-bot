@@ -5,7 +5,7 @@ const express = require("express");
 
 // Kiểm tra xem các module có được tải không
 if (!puppeteer || !TelegramBot || !express) {
-    console.error("❌ Một hoặc nhiều thư viện (puppeteer, node-telegram-bot-api, express) không được cài đặt. Vui lòng chạy 'npm install puppeteer node-telegram-bot-api express dotenv'.");
+    console.error("❌ Một hoặc nhiều thư viện (puppeteer, node-telegram-bot-api, express) không được cài đặt. Vui lòng kiểm tra Dockerfile.");
     process.exit(1);
 }
 
@@ -88,7 +88,6 @@ async function getSchedule(page) {
     await page.goto("https://portal.vhu.edu.vn/student/schedules", { timeout: 15000, waitUntil: 'domcontentloaded' });
     await page.waitForSelector(".MuiGrid-root", { timeout: 5000 });
 
-    // Chọn năm học và học kỳ bằng page.evaluate
     const yearDropdownSelector = 'div[role="button"][id="demo-simple-select-helper"]';
     await page.waitForSelector(yearDropdownSelector, { timeout: 5000 });
     await page.click(yearDropdownSelector);
