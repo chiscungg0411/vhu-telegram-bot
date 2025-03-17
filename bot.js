@@ -65,7 +65,7 @@ async function loginToPortal(page) {
     await retry(() => page.goto("https://portal.vhu.edu.vn/login", { timeout: 120000 }));
 
     console.log("⏳ Chờ trang đăng nhập tải...");
-    await page.waitForSelector("input[name='email']", { timeout: 7000 });
+    await page.waitForSelector("input[name='email']", { timeout: 12000 });
 
     console.log("🔍 Kiểm tra input email...");
     const emailExists = await page.evaluate(() => {
@@ -420,7 +420,7 @@ bot.onText(/\/congtac/, async (msg) => {
         await page.click('li[data-value="2024-2025"]');
 
         // Chờ dropdown đóng lại
-        await page.waitForTimeout(1000);
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
         // Chọn học kỳ
         console.log("🔄 Mở dropdown học kỳ...");
