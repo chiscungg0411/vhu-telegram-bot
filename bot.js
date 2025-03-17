@@ -303,7 +303,20 @@ bot.onText(/\/congtac/, async (msg) => {
         await page.goto("https://portal.vhu.edu.vn/student/congtacxahoi", { timeout: 120000 });
 
         console.log("⏳ Chờ trang tải hoàn tất...");
-        await page.waitForSelector("table.MuiTable-root", { timeout: 5000 });
+        let tableLoaded = false;
+        for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+                await page.waitForSelector("table.MuiTable-root", { timeout: 10000 });
+                tableLoaded = true;
+                break;
+            } catch (error) {
+                console.log(`❌ Thử lần ${attempt + 1}: Không tìm thấy selector 'table.MuiTable-root' sau 10 giây.`);
+                if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 2000)); // Chờ 2 giây trước khi thử lại
+            }
+        }
+        if (!tableLoaded) {
+            throw new Error("Không thể tìm thấy bảng công tác xã hội sau nhiều lần thử.");
+        }
 
         console.log("🔍 Kiểm tra bảng công tác xã hội...");
         const tableExists = await page.evaluate(() => !!document.querySelector("table.MuiTable-root"));
