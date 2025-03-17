@@ -62,26 +62,72 @@ async function loginToPortal(page) {
     };
 
     console.log("🔄 Truy cập trang đăng nhập...");
-    await retry(() => page.goto("https://portal.vhu.edu.vn/login", { timeout: 120000 }));
+    await retry(() => page.goto("https://portal.vhu.edu.vn/login", { timeout: 120000, waitUntil: 'networkidle2' }));
+
+    // Kiểm tra URL hiện tại sau khi truy cập
+    const currentUrl = page.url();
+    console.log("🌐 URL hiện tại sau khi truy cập:", currentUrl);
+    if (!currentUrl.includes("login")) {
+        const pageContent = await page.content();
+        console.log("📄 Nội dung trang khi không ở trang đăng nhập:", pageContent);
+        throw new Error("Không ở trang đăng nhập! Có thể đã bị chuyển hướng hoặc trang không tải đúng.");
+    }
 
     console.log("⏳ Chờ trang đăng nhập tải...");
-    await page.waitForSelector("input[name='email']", { timeout: 12000 });
+    let emailSelector;
+    try {
+        // Thử các selector khác nhau để tìm ô nhập email
+        await page.waitForSelector("input[name='email']", { timeout: 15000 });
+        emailSelector = "input[name='email']";
+    } catch (error) {
+        console.log("❌ Không tìm thấy input[name='email'], thử selector khác...");
+        try {
+            await page.waitForSelector("input[type='email']", { timeout: 5000 });
+            emailSelector = "input[type='email']";
+        } catch (error) {
+            console.log("❌ Không tìm thấy input[type='email'], thử selector khác...");
+            try {
+                await page.waitForSelector("input[name='username']", { timeout: 5000 });
+                emailSelector = "input[name='username']";
+            } catch (error) {
+                const pageContent = await page.content();
+                console.log("📄 Nội dung trang khi không tìm thấy selector email:", pageContent);
+                throw new Error("Không tìm thấy ô nhập email! Có thể selector đã thay đổi.");
+            }
+        }
+    }
 
     console.log("🔍 Kiểm tra input email...");
-    const emailExists = await page.evaluate(() => {
-        const emailInput = document.querySelector("input[name='email']") || document.querySelector("input[type='email']");
+    const emailExists = await page.evaluate((selector) => {
+        const emailInput = document.querySelector(selector);
         console.log("HTML của ô email:", emailInput ? emailInput.outerHTML : "Không tìm thấy");
         return !!emailInput;
-    });
+    }, emailSelector);
     if (!emailExists) {
         throw new Error("Không tìm thấy ô nhập email! Vui lòng kiểm tra lại selector hoặc cấu trúc trang.");
     }
 
     console.log("📩 Nhập tài khoản...");
-    await page.type("input[name='email']", process.env.VHU_EMAIL, { delay: 100 });
+    await page.type(emailSelector, process.env.VHU_EMAIL, { delay: 100 });
 
     console.log("🔒 Nhập mật khẩu...");
-    await page.type("input[name='password']", process.env.VHU_PASSWORD, { delay: 100 });
+    let passwordSelector;
+    try {
+        await page.waitForSelector("input[name='password']", { timeout: 5000 });
+        passwordSelector = "input[name='password']";
+    } catch (error) {
+        console.log("❌ Không tìm thấy input[name='password'], thử selector khác...");
+        try {
+            await page.waitForSelector("input[type='password']", { timeout: 5000 });
+            passwordSelector = "input[type='password']";
+        } catch (error) {
+            const pageContent = await page.content();
+            console.log("📄 Nội dung trang khi không tìm thấy selector password:", pageContent);
+            throw new Error("Không tìm thấy ô nhập mật khẩu! Có thể selector đã thay đổi.");
+        }
+    }
+
+    await page.type(passwordSelector, process.env.VHU_PASSWORD, { delay: 100 });
 
     console.log("🔓 Nhấn nút đăng nhập...");
     await page.click("button[type='submit']");
@@ -91,10 +137,12 @@ async function loginToPortal(page) {
 
     // Kiểm tra xem có đăng nhập thành công không
     const isLoggedIn = await page.evaluate(() => {
-        return !document.querySelector("input[name='email']"); // Nếu vẫn thấy ô email, nghĩa là đăng nhập thất bại
+        return !document.querySelector("input[name='email']") && !document.querySelector("input[type='email']") && !document.querySelector("input[name='username']");
     });
     if (!isLoggedIn) {
-        throw new Error("Đăng nhập thất bại! Vui lòng kiểm tra email và mật khẩu.");
+        const pageContent = await page.content();
+        console.log("📄 Nội dung trang sau khi đăng nhập thất bại:", pageContent);
+        throw new Error("Đăng nhập thất bại! Vui lòng kiểm tra email và mật khẩu hoặc xem log để kiểm tra CAPTCHA.");
     }
 }
 
