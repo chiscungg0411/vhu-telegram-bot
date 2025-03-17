@@ -152,17 +152,18 @@ bot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
     console.log("Received /start command from chat:", chatId);
     bot.sendMessage(chatId, "👋 Xin chào! Mình là Trợ lý VHU, người luôn cập nhật thông tin nhanh nhất cho bạn <3.\n" +
-        "📅 Dùng /lichhoc [tuannay|tuansau] để xem lịch học - (/lichhoc: mặc định tuần này).\n" +
+        "📅 Dùng /tuannay để xem lịch học tuần này.\n" +
+        "📅 Dùng /tuansau để xem lịch học tuần sau.\n" +
         "🔔 Dùng /thongbao để xem danh sách thông báo.\n" +
-        "📋 Dùng /congtac để xem danh sách công tác xã hội.");
+        "📋 Dùng /congtac để xem danh sách công tác xã hội.\n\n" +
+        "💡 *Mẹo:* Nhấn vào nút menu 📋 (gần ô nhập tin nhắn) để chọn lệnh nhanh!");
 });
 
-// Lệnh /lichhoc
-bot.onText(/\/lichhoc(?:\s+(tuầnnày|tuansau))?/i, async (msg, match) => {
+// Lệnh /tuannay và /tuansau
+bot.onText(/\/tuannay/, async (msg) => {
     const chatId = msg.chat.id;
-    console.log("Received /lichhoc command from chat:", chatId);
-    const weekType = match[1] ? match[1].toLowerCase() : "tuầnnày";
-    bot.sendMessage(chatId, `📅 Đang lấy thông tin lịch học ${weekType === "tuansau" ? "tuần sau" : "tuần này"}, vui lòng chờ trong giây lát ⌛...`);
+    console.log("Received /tuannay command from chat:", chatId);
+    bot.sendMessage(chatId, "📅 Đang lấy thông tin lịch học tuần này, vui lòng chờ trong giây lát ⌛...");
 
     let browser;
     try {
@@ -175,14 +176,14 @@ bot.onText(/\/lichhoc(?:\s+(tuầnnày|tuansau))?/i, async (msg, match) => {
 
         await loginToPortal(page);
 
-        const lichHoc = await getSchedule(page, weekType);
+        const lichHoc = await getSchedule(page, "tuầnnày");
 
         await browser.close();
 
         if (Object.keys(lichHoc).length === 0) {
-            bot.sendMessage(chatId, `❌ Không tìm thấy lịch học ${weekType === "tuansau" ? "tuần sau" : "tuần này"}.`);
+            bot.sendMessage(chatId, "❌ Không tìm thấy lịch học tuần này.");
         } else {
-            let message = `📅 *Lịch học ${weekType === "tuansau" ? "tuần sau" : "tuần này"} của bạn:*\n *------------------------------------* \n`;
+            let message = "📅 *Lịch học tuần này của bạn:*\n *------------------------------------* \n";
             Object.entries(lichHoc).forEach(([ngay, monHocs]) => {
                 message += `📌 *Ngày:* ${ngay}\n`;
                 if (monHocs.length > 0) {
@@ -198,7 +199,52 @@ bot.onText(/\/lichhoc(?:\s+(tuầnnày|tuansau))?/i, async (msg, match) => {
             bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
         }
     } catch (error) {
-        bot.sendMessage(chatId, `❌ Lỗi khi lấy lịch học ${weekType === "tuansau" ? "tuần sau" : "tuần này"}: ${error.message}`);
+        bot.sendMessage(chatId, "❌ Lỗi khi lấy lịch học tuần này: " + error.message);
+        console.error(error);
+        if (browser) await browser.close();
+    }
+});
+
+bot.onText(/\/tuansau/, async (msg) => {
+    const chatId = msg.chat.id;
+    console.log("Received /tuansau command from chat:", chatId);
+    bot.sendMessage(chatId, "📅 Đang lấy thông tin lịch học tuần sau, vui lòng chờ trong giây lát ⌛...");
+
+    let browser;
+    try {
+        browser = await puppeteer.launch({
+            headless: true,
+            args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+        });
+        const page = await browser.newPage();
+        await page.setViewport({ width: 1280, height: 720 });
+
+        await loginToPortal(page);
+
+        const lichHoc = await getSchedule(page, "tuansau");
+
+        await browser.close();
+
+        if (Object.keys(lichHoc).length === 0) {
+            bot.sendMessage(chatId, "❌ Không tìm thấy lịch học tuần sau.");
+        } else {
+            let message = "📅 *Lịch học tuần sau của bạn:*\n *------------------------------------* \n";
+            Object.entries(lichHoc).forEach(([ngay, monHocs]) => {
+                message += `📌 *Ngày:* ${ngay}\n`;
+                if (monHocs.length > 0) {
+                    monHocs.forEach((monHoc) => {
+                        message += `📖 *Phòng học - Môn học:* ${monHoc}\n\n`;
+                    });
+                } else {
+                    message += "❌ Không có lịch học.\n";
+                }
+                message += "\n";
+            });
+
+            bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+        }
+    } catch (error) {
+        bot.sendMessage(chatId, "❌ Lỗi khi lấy lịch học tuần sau: " + error.message);
         console.error(error);
         if (browser) await browser.close();
     }
@@ -311,7 +357,7 @@ bot.onText(/\/congtac/, async (msg) => {
                 break;
             } catch (error) {
                 console.log(`❌ Thử lần ${attempt + 1}: Không tìm thấy selector 'table.MuiTable-root' sau 10 giây.`);
-                if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 2000)); // Chờ 2 giây trước khi thử lại
+                if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 2000));
             }
         }
         if (!tableLoaded) {
@@ -333,7 +379,7 @@ bot.onText(/\/congtac/, async (msg) => {
             const result = [];
             for (let row of rows) {
                 const columns = row.querySelectorAll("td");
-                if (columns.length >= 6) { // Đảm bảo có đủ cột
+                if (columns.length >= 6) {
                     const suKien = columns[1].innerText.trim();
                     const diaDiem = columns[2].innerText.trim();
                     const soLuongDK = columns[3].innerText.trim();
@@ -343,7 +389,7 @@ bot.onText(/\/congtac/, async (msg) => {
 
                     result.push({ suKien, diaDiem, soLuongDK, diem, batDau, ketThuc });
                 }
-                if (result.length >= 5) break; // Chỉ lấy 5 dòng đầu tiên
+                if (result.length >= 5) break;
             }
             return result;
         });
