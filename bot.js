@@ -3,11 +3,15 @@ const TelegramBot = require("node-telegram-bot-api");
 const express = require("express");
 const axios = require("axios");
 const fs = require("fs").promises;
+const NodeCache = require("node-cache");
+const axiosRetry = require("axios-retry");
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const app = express();
 app.use(express.json());
 const bot = new TelegramBot(TOKEN);
+
+axiosRetry(axios, { retries: 3, retryDelay: (retryCount) => retryCount * 1000, retryCondition: (error) => error.response?.status === 401 || error.code === "ECONNABORTED" });
 
 process.on("unhandledRejection", (reason, promise) => {
   console.error("❌ Unhandled Rejection at:", promise, "reason:", reason);
@@ -23,13 +27,20 @@ const CACHE_FILE = {
   notifications: "./cache_notifications.json",
   socialWork: "./cache_socialWork.json",
 };
-const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 giờ
+const CACHE_DURATION = 6 * 60 * 60 * 1000; // 6 giờ
+const cache = new NodeCache({ stdTTL: CACHE_DURATION });
 
 async function loadFromCache(file) {
+  const cached = cache.get(file);
+  if (cached) return cached;
+
   try {
     const data = await fs.readFile(file, "utf8");
     const parsed = JSON.parse(data);
-    if (Date.now() - parsed.timestamp < CACHE_DURATION) return parsed.data;
+    if (Date.now() - parsed.timestamp < CACHE_DURATION) {
+      cache.set(file, parsed.data);
+      return parsed.data;
+    }
     return null;
   } catch (error) {
     console.error(`❌ Lỗi đọc cache từ ${file}:`, error.message);
@@ -38,11 +49,8 @@ async function loadFromCache(file) {
 }
 
 async function saveToCache(file, data) {
-  try {
-    await fs.writeFile(file, JSON.stringify({ timestamp: Date.now(), data }), "utf8");
-  } catch (error) {
-    console.error(`❌ Lỗi lưu cache vào ${file}:`, error.message);
-  }
+  cache.set(file, data);
+  await fs.writeFile(file, JSON.stringify({ timestamp: Date.now(), data }), "utf8");
 }
 
 async function ensureCacheDir() {
@@ -62,10 +70,11 @@ async function fetchData(endpoint, params = {}) {
     const response = await axios.get(`${API_BASE}${endpoint}`, {
       headers: { Authorization: AUTH_TOKEN },
       params,
+      timeout: 10000, // 10 giây timeout
     });
     return response.data;
   } catch (error) {
-    console.error(`❌ Lỗi gọi API ${endpoint}:`, error.message);
+    console.error(`❌ Lỗi gọi API ${endpoint}:`, error.message, error.response?.status);
     throw error;
   }
 }
@@ -75,9 +84,8 @@ async function getWeeks() {
   const cached = await loadFromCache(CACHE_FILE.weeks);
   if (cached) return cached;
 
-  const data = await fetchData("/weeks"); // Thay bằng endpoint thực tế
+  const data = await fetchData("/weeks");
   await saveToCache(CACHE_FILE.weeks, data);
-  console.log("✅ Đã cập nhật danh sách tuần");
   return data;
 }
 
@@ -88,43 +96,39 @@ async function getYearAndTerm() {
 
   const data = await fetchData("/yearandterm");
   await saveToCache(CACHE_FILE.yearandterm, data);
-  console.log("✅ Đã cập nhật năm và kỳ học");
   return data;
 }
 
-// Tính tuần hiện tại dựa trên ngày
-function getCurrentWeek(weeks) {
+// Tính tuần hiện tại
+async function getCurrentWeek() {
+  const weeks = await getWeeks();
   const now = new Date();
-  const currentDate = now.toLocaleDateString("en-GB"); // Định dạng dd/mm/yyyy
   return weeks.find(w => {
     const [beginDay, beginMonth, beginYear] = w.BeginDate.split("/");
     const [endDay, endMonth, endYear] = w.EndDate.split("/");
     const begin = new Date(`${beginYear}-${beginMonth}-${beginDay}`);
     const end = new Date(`${endYear}-${endMonth}-${endDay}`);
     return now >= begin && now <= end;
-  })?.Week || 12; // Mặc định tuần 12 nếu không tìm thấy
+  })?.Week || 12;
 }
 
 // Lấy lịch học
 async function getSchedule(weekOffset = 0) {
-  const weeks = await getWeeks();
-  const currentWeek = getCurrentWeek(weeks) + weekOffset;
+  const currentWeek = (await getCurrentWeek()) + weekOffset;
   const { CurrentYear, CurrentTerm } = await getYearAndTerm();
-  const params = {
-    namhoc: CurrentYear,
-    hocky: CurrentTerm,
-    tuan: currentWeek,
-  };
+  const params = { namhoc: CurrentYear, hocky: CurrentTerm, tuan: currentWeek };
+  const cached = await loadFromCache(CACHE_FILE.schedules);
+  if (cached?.[`week${weekOffset}`]) return cached[`week${weekOffset}`];
+
+  const weeks = await getWeeks();
   const data = await fetchData("/DrawingSchedules", params);
   const lichHoc = processScheduleData(data, weeks.find(w => w.Week === currentWeek));
-  const cached = (await loadFromCache(CACHE_FILE.schedules)) || {};
-  cached[`week${weekOffset}`] = lichHoc;
-  await saveToCache(CACHE_FILE.schedules, cached);
-  console.log(`✅ Đã cập nhật lịch học tuần ${currentWeek}`);
+  const cacheData = (await loadFromCache(CACHE_FILE.schedules)) || {};
+  cacheData[`week${weekOffset}`] = lichHoc;
+  await saveToCache(CACHE_FILE.schedules, cacheData);
   return lichHoc;
 }
 
-// Xử lý dữ liệu lịch học
 function processScheduleData(apiData, weekData) {
   const monHocTheoNgay = {};
   if (apiData.ResultDataSchedule) {
@@ -141,7 +145,7 @@ function processScheduleData(apiData, weekData) {
   } else {
     monHocTheoNgay["Lịch học"] = ["❌ Dữ liệu không hợp lệ"];
   }
-  return { schedule: monHocTheoNgay, week: weekData };
+  return { schedule: monHocTheoNgay, week: { BeginDate: weekData.BeginDate, EndDate: weekData.EndDate, DisPlayWeek: weekData.DisPlayWeek } };
 }
 
 // Lấy thông báo
@@ -149,10 +153,9 @@ async function getNotifications() {
   const cached = await loadFromCache(CACHE_FILE.notifications);
   if (cached) return cached;
 
-  const data = await fetchData("/notifications"); // Thay bằng endpoint thực tế
+  const data = await fetchData("/notifications");
   const sortedData = data.sort((a, b) => new Date(b.CreationDate) - new Date(a.CreationDate));
   await saveToCache(CACHE_FILE.notifications, sortedData);
-  console.log("✅ Đã cập nhật thông báo");
   return sortedData;
 }
 
@@ -161,27 +164,10 @@ async function getSocialWork() {
   const cached = await loadFromCache(CACHE_FILE.socialWork);
   if (cached) return cached;
 
-  const data = await fetchData("/socialWork"); // Thay bằng endpoint thực tế
+  const data = await fetchData("/socialWork");
   const sortedData = data.result.sort((a, b) => new Date(b.UpdateDate) - new Date(a.UpdateDate));
   await saveToCache(CACHE_FILE.socialWork, sortedData);
-  console.log("✅ Đã cập nhật công tác xã hội");
   return sortedData;
-}
-
-async function updateAllData() {
-  try {
-    const [schedule0, schedule1, notifications, socialWork] = await Promise.all([
-      getSchedule(0),
-      getSchedule(1),
-      getNotifications(),
-      getSocialWork(),
-    ]);
-    console.log("✅ Đã cập nhật toàn bộ dữ liệu vào cache");
-    return { schedule0, schedule1, notifications, socialWork };
-  } catch (error) {
-    console.error("❌ Lỗi cập nhật dữ liệu:", error.message);
-    throw error;
-  }
 }
 
 const PORT = process.env.PORT || 10000;
@@ -210,119 +196,75 @@ ensureCacheDir().then(() => {
 
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
-  bot.sendMessage(chatId, "👋 Xin chào! Mình là Trợ lý VHU.\n📅 /tuannay\n📅 /tuansau\n🔔 /thongbao\n📋 /congtac");
+  bot.sendMessage(chatId, "👋 Xin chào! Mình là Trợ lý VHU, người luôn cập nhật thông tin nhanh nhất cho bạn <3.\n📅 Dùng /tuannay để xem lịch học tuần này.\n📅 Dùng /tuansau để xem lịch học tuần sau.\n🔔 Dùng /thongbao để xem danh sách thông báo.\n📋 Dùng /congtac để xem danh sách công tác xã hội.\n💡 *Mẹo:* Nhấn vào nút menu 📋 (gần ô nhập tin nhắn) để chọn lệnh nhanh!");
 });
 
 bot.onText(/\/tuannay/, async (msg) => {
   const chatId = msg.chat.id;
-  const cached = await loadFromCache(CACHE_FILE.schedules);
-  const lichHoc = cached?.week0;
-  if (!lichHoc) {
-    bot.sendMessage(chatId, "📅 Đang tải dữ liệu...");
-    try {
-      await updateAllData();
-      const updatedCache = await loadFromCache(CACHE_FILE.schedules);
-      const updatedLichHoc = updatedCache?.week0;
-      let message = `📅 *Lịch học tuần ${updatedLichHoc.week.DisPlayWeek || 'này'}: ${updatedLichHoc.week.BeginDate} - ${updatedLichHoc.week.EndDate}*\n*------------------------------------*\n`;
-      for (const [ngay, monHocs] of Object.entries(updatedLichHoc.schedule)) {
-        message += `📌 *${ngay}:*\n${monHocs.length ? monHocs.map(m => `📖 ${m.subject} (${m.time} - ${m.room}, GV: ${m.professor})`).join("\n") : "❌ Không có lịch"}\n\n`;
-      }
-      bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
-    } catch (error) {
-      bot.sendMessage(chatId, `❌ Lỗi: ${error.message}`);
+  bot.sendMessage(chatId, "📅 Đang lấy thông tin lịch học tuần này, vui lòng chờ trong giây lát ⌛...");
+  try {
+    const lichHoc = await getSchedule(0);
+    let message = `📅 *Lịch học tuần ${lichHoc.week.DisPlayWeek || 'này'}: ${lichHoc.week.BeginDate} - ${lichHoc.week.EndDate}*\n*------------------------------------*\n`;
+    for (const [ngay, monHocs] of Object.entries(lichHoc.schedule)) {
+      message += `📌 *${ngay}:*\n${monHocs.length ? monHocs.map(m => `📖 ${m.subject} (${m.time} - ${m.room}, GV: ${m.professor})`).join("\n") : "❌ Không có lịch"}\n\n`;
     }
-    return;
+    bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+  } catch (error) {
+    console.error("❌ Lỗi lấy lịch học:", error.message);
+    bot.sendMessage(chatId, `❌ Lỗi: Không thể lấy lịch học. Vui lòng kiểm tra token hoặc thử lại sau. Chi tiết: ${error.message}`);
   }
-  let message = `📅 *Lịch học tuần ${lichHoc.week.DisPlayWeek || 'này'}: ${lichHoc.week.BeginDate} - ${lichHoc.week.EndDate}*\n*------------------------------------*\n`;
-  for (const [ngay, monHocs] of Object.entries(lichHoc.schedule)) {
-    message += `📌 *${ngay}:*\n${monHocs.length ? monHocs.map(m => `📖 ${m.subject} (${m.time} - ${m.room}, GV: ${m.professor})`).join("\n") : "❌ Không có lịch"}\n\n`;
-  }
-  bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
 });
 
 bot.onText(/\/tuansau/, async (msg) => {
   const chatId = msg.chat.id;
-  const cached = await loadFromCache(CACHE_FILE.schedules);
-  const lichHoc = cached?.week1;
-  if (!lichHoc) {
-    bot.sendMessage(chatId, "📅 Đang tải dữ liệu...");
-    try {
-      await updateAllData();
-      const updatedCache = await loadFromCache(CACHE_FILE.schedules);
-      const updatedLichHoc = updatedCache?.week1;
-      let message = `📅 *Lịch học tuần ${updatedLichHoc.week.DisPlayWeek || 'sau'}: ${updatedLichHoc.week.BeginDate} - ${updatedLichHoc.week.EndDate}*\n*------------------------------------*\n`;
-      for (const [ngay, monHocs] of Object.entries(updatedLichHoc.schedule)) {
-        message += `📌 *${ngay}:*\n${monHocs.length ? monHocs.map(m => `📖 ${m.subject} (${m.time} - ${m.room}, GV: ${m.professor})`).join("\n") : "❌ Không có lịch"}\n\n`;
-      }
-      bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
-    } catch (error) {
-      bot.sendMessage(chatId, `❌ Lỗi: ${error.message}`);
+  bot.sendMessage(chatId, "📅 Đang lấy thông tin lịch học tuần sau, vui lòng chờ trong giây lát ⌛...");
+  try {
+    const lichHoc = await getSchedule(1);
+    let message = `📅 *Lịch học tuần ${lichHoc.week.DisPlayWeek || 'sau'}: ${lichHoc.week.BeginDate} - ${lichHoc.week.EndDate}*\n*------------------------------------*\n`;
+    for (const [ngay, monHocs] of Object.entries(lichHoc.schedule)) {
+      message += `📌 *${ngay}:*\n${monHocs.length ? monHocs.map(m => `📖 ${m.subject} (${m.time} - ${m.room}, GV: ${m.professor})`).join("\n") : "❌ Không có lịch"}\n\n`;
     }
-    return;
+    bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+  } catch (error) {
+    console.error("❌ Lỗi lấy lịch học tuần sau:", error.message);
+    bot.sendMessage(chatId, `❌ Lỗi: Không thể lấy lịch học tuần sau. Vui lòng kiểm tra token hoặc thử lại sau. Chi tiết: ${error.message}`);
   }
-  let message = `📅 *Lịch học tuần ${lichHoc.week.DisPlayWeek || 'sau'}: ${lichHoc.week.BeginDate} - ${lichHoc.week.EndDate}*\n*------------------------------------*\n`;
-  for (const [ngay, monHocs] of Object.entries(lichHoc.schedule)) {
-    message += `📌 *${ngay}:*\n${monHocs.length ? monHocs.map(m => `📖 ${m.subject} (${m.time} - ${m.room}, GV: ${m.professor})`).join("\n") : "❌ Không có lịch"}\n\n`;
-  }
-  bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
 });
 
 bot.onText(/\/thongbao/, async (msg) => {
   const chatId = msg.chat.id;
-  const notifications = await loadFromCache(CACHE_FILE.notifications);
-  if (!notifications) {
-    bot.sendMessage(chatId, "🔔 Đang tải dữ liệu...");
-    try {
-      await updateAllData();
-      const updatedNotifications = await loadFromCache(CACHE_FILE.notifications);
-      let message = "🔔 *Thông báo mới nhất:*\n*------------------------------------*\n";
-      updatedNotifications.slice(0, 5).forEach((n, i) => {
-        message += `📢 *${i + 1}. ${n.MessageSubject}*\n📩 ${n.SenderName || 'Không rõ'}\n⏰ ${n.CreationDate || 'Không rõ'}\n\n`;
-      });
-      if (updatedNotifications.length > 5) message += `📢 Còn ${updatedNotifications.length - 5} thông báo khác.`;
-      bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
-    } catch (error) {
-      bot.sendMessage(chatId, `❌ Lỗi: ${error.message}`);
-    }
-    return;
+  bot.sendMessage(chatId, "🔔 Đang lấy thông tin thông báo, vui lòng chờ trong giây lát ⌛...");
+  try {
+    const notifications = await getNotifications();
+    let message = "🔔 *Thông báo mới nhất:*\n*------------------------------------*\n";
+    notifications.slice(0, 5).forEach((n, i) => {
+      message += `📢 *${i + 1}. ${n.MessageSubject}*\n📩 ${n.SenderName || 'Không rõ'}\n⏰ ${n.CreationDate || 'Không rõ'}\n\n`;
+    });
+    if (notifications.length > 5) message += `📢 Còn ${notifications.length - 5} thông báo khác.`;
+    bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+  } catch (error) {
+    console.error("❌ Lỗi lấy thông báo:", error.message);
+    bot.sendMessage(chatId, `❌ Lỗi: Không thể lấy thông báo. Vui lòng kiểm tra token hoặc thử lại sau. Chi tiết: ${error.message}`);
   }
-  let message = "🔔 *Thông báo mới nhất:*\n*------------------------------------*\n";
-  notifications.slice(0, 5).forEach((n, i) => {
-    message += `📢 *${i + 1}. ${n.MessageSubject}*\n📩 ${n.SenderName || 'Không rõ'}\n⏰ ${n.CreationDate || 'Không rõ'}\n\n`;
-  });
-  if (notifications.length > 5) message += `📢 Còn ${notifications.length - 5} thông báo khác.`;
-  bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
 });
 
 bot.onText(/\/congtac/, async (msg) => {
   const chatId = msg.chat.id;
-  const congTacData = await loadFromCache(CACHE_FILE.socialWork);
-  if (!congTacData) {
-    bot.sendMessage(chatId, "📋 Đang tải dữ liệu...");
-    try {
-      await updateAllData();
-      const updatedCongTacData = await loadFromCache(CACHE_FILE.socialWork);
-      let message = "📋 *Công tác xã hội:*\n*------------------------------------*\n";
-      updatedCongTacData.slice(0, 5).forEach((c, i) => {
-        const fromTime = new Date(c.FromTime).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" });
-        const toTime = new Date(c.ToTime).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" });
-        message += `📌 *${i + 1}. ${c.Details}*\n📍 ${c.Location || 'Chưa rõ'}\n👥 ${c.NumRegisted || 'Chưa rõ'} người đăng ký\n⭐ ${c.MarkConverted || '0'} điểm\n🕛 ${fromTime} - ${toTime}\n\n`;
-      });
-      if (updatedCongTacData.length > 5) message += `📢 Còn ${updatedCongTacData.length - 5} công tác khác.`;
-      bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
-    } catch (error) {
-      bot.sendMessage(chatId, `❌ Lỗi: ${error.message}`);
-    }
-    return;
+  bot.sendMessage(chatId, "📋 Đang lấy thông tin công tác xã hội, vui lòng chờ trong giây lát ⌛...");
+  try {
+    const congTacData = await getSocialWork();
+    let message = "📋 *Công tác xã hội:*\n*------------------------------------*\n";
+    congTacData.slice(0, 5).forEach((c, i) => {
+      const fromTime = new Date(c.FromTime).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" });
+      const toTime = new Date(c.ToTime).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" });
+      message += `📌 *${i + 1}. ${c.Details}*\n📍 ${c.Location || 'Chưa rõ'}\n👥 ${c.NumRegisted || 'Chưa rõ'} người đăng ký\n⭐ ${c.MarkConverted || '0'} điểm\n🕛 ${fromTime} - ${toTime}\n\n`;
+    });
+    if (congTacData.length > 5) message += `📢 Còn ${congTacData.length - 5} công tác khác.`;
+    bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+  } catch (error) {
+    console.error("❌ Lỗi lấy công tác xã hội:", error.message);
+    bot.sendMessage(chatId, `❌ Lỗi: Không thể lấy công tác xã hội. Vui lòng kiểm tra token hoặc thử lại sau. Chi tiết: ${error.message}`);
   }
-  let message = "📋 *Công tác xã hội:*\n*------------------------------------*\n";
-  congTacData.slice(0, 5).forEach((c, i) => {
-    const fromTime = new Date(c.FromTime).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" });
-    const toTime = new Date(c.ToTime).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" });
-    message += `📌 *${i + 1}. ${c.Details}*\n📍 ${c.Location || 'Chưa rõ'}\n👥 ${c.NumRegisted || 'Chưa rõ'} người đăng ký\n⭐ ${c.MarkConverted || '0'} điểm\n🕛 ${fromTime} - ${toTime}\n\n`;
-  });
-  if (congTacData.length > 5) message += `📢 Còn ${congTacData.length - 5} công tác khác.`;
-  bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
 });
 
 console.log("🤖 Bot Telegram đang chạy...");
