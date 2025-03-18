@@ -42,12 +42,11 @@ RUN apt-get update && apt-get install -y \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-# Thêm khóa GPG của Google Chrome và thiết lập kho lưu trữ
-RUN wget --quiet -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
-    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
-    && apt-get update \
-    && apt-get install -y google-chrome-stable \
-    --no-install-recommends \
+# Tải và cài đặt Google Chrome trực tiếp từ file .deb với thử lại nếu thất bại
+RUN wget --quiet --tries=3 -O /tmp/google-chrome-stable_current_amd64.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+    && if [ ! -f /tmp/google-chrome-stable_current_amd64.deb ]; then echo "Error: Failed to download Google Chrome .deb file" && exit 1; fi \
+    && dpkg -i /tmp/google-chrome-stable_current_amd64.deb || apt-get update && apt-get install -f -y \
+    && rm /tmp/google-chrome-stable_current_amd64.deb \
     && rm -rf /var/lib/apt/lists/*
 
 # Xác minh Chrome được cài đặt
