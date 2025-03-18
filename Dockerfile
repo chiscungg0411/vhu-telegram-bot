@@ -53,12 +53,18 @@ RUN dpkg -i /tmp/google-chrome-stable_current_amd64.deb || (apt-get update && ap
     && rm /tmp/google-chrome-stable_current_amd64.deb \
     && rm -rf /var/lib/apt/lists/*
 
-# Debug đường dẫn Chrome
+# Debug đường dẫn Chrome và tạo symlink nếu cần
 RUN echo "Checking Chrome installation path..." \
-    && find / -name "google-chrome-stable" 2>/dev/null || echo "Chrome not found in any path"
+    && CHROME_PATH=$(find / -name "google-chrome-stable" 2>/dev/null | head -n 1) \
+    && if [ -z "$CHROME_PATH" ]; then echo "Chrome not found in any path" && exit 1; fi \
+    && echo "Chrome found at: $CHROME_PATH" \
+    && if [ "$CHROME_PATH" != "/usr/bin/google-chrome-stable" ]; then \
+         ln -sf "$CHROME_PATH" /usr/bin/google-chrome-stable \
+         && echo "Created symlink from $CHROME_PATH to /usr/bin/google-chrome-stable"; \
+       fi
 
 # Xác minh Chrome được cài đặt tại đường dẫn mong muốn
-RUN if [ ! -f /usr/bin/google-chrome-stable ]; then echo "Error: Google Chrome not found at /usr/bin/google-chrome-stable" && exit 1; fi
+RUN if [ ! -f /usr/bin/google-chrome-stable ]; then echo "Error: Google Chrome not found at /usr/bin/google-chrome-stable after symlink" && exit 1; fi
 
 # Copy package.json và cài đặt dependencies
 COPY package.json .
