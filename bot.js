@@ -1,7 +1,7 @@
 require("dotenv").config();
 const TelegramBot = require("node-telegram-bot-api");
 const express = require("express");
-const puppeteer = require("puppeteer");
+const puppeteer = require("puppeteer-core"); // Sử dụng puppeteer-core
 const fs = require("fs").promises;
 
 // Khởi tạo Express và Bot
@@ -80,7 +80,7 @@ async function initializeBrowser(maxRetries = 3) {
       await page.setRequestInterception(true);
       page.on("request", (req) => {
         const resourceType = req.resourceType();
-        if (["image", "stylesheet", "font", "script", "media"].includes(resourceType)) req.abort();
+        if (["image", "stylesheet", "font", "media"].includes(resourceType)) req.abort();
         else req.continue();
       });
       await loginToPortal(page);
@@ -91,7 +91,7 @@ async function initializeBrowser(maxRetries = 3) {
       if (browser) await browser.close();
       browser = null;
       if (attempt === maxRetries) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 5000)); // Chờ 5 giây trước khi thử lại
+      await new Promise((resolve) => setTimeout(resolve, 5000));
     }
   }
 }
