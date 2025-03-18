@@ -46,6 +46,7 @@ async function initializeBrowser() {
     browser = await puppeteer.launch({
         headless: 'new',
         args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+        executablePath: '/usr/bin/google-chrome-stable', // Chỉ định đường dẫn Chrome binary
         timeout: 10000,
     });
     console.log("✅ Trình duyệt Puppeteer đã được khởi tạo.");
@@ -60,7 +61,7 @@ process.on('SIGINT', async () => {
     process.exit();
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000; // Sử dụng cổng 10000 theo log
 app.listen(PORT, async () => {
     console.log(`Server running on port ${PORT}`);
     const webhookUrl = `https://vhu-telegram-bot.onrender.com/bot${TOKEN}`;
@@ -113,7 +114,7 @@ async function loginToPortal(page) {
     console.log("✅ Đăng nhập thành công, thời gian:", Date.now() - startTime, "ms");
 }
 
-// Hàm lấy lịch học với tối ưu hóa (đã tách thành module riêng)
+// Hàm lấy lịch học với tối ưu hóa
 async function getSchedule(page, weekOffset = 0) {
     const startTime = Date.now();
     console.log("📅 Bắt đầu lấy lịch học...", startTime);
