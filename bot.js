@@ -84,7 +84,7 @@ async function initializeBrowser(maxRetries = 3) {
       if (browser) await browser.close();
       browser = null;
       if (attempt === maxRetries) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 5000)); // Chờ 5 giây trước khi thử lại
+      await new Promise((resolve) => setTimeout(resolve, 5000));
     }
   }
 }
@@ -264,7 +264,7 @@ app.post(`/bot${TOKEN}`, (req, res) => {
 });
 app.get("/ping", (req, res) => {
   console.log("📡 Nhận ping từ Render");
-  res.send("Bot is alive!");
+  res.status(200).send("Bot is alive!"); // Đảm bảo trả lời ngay lập tức
 });
 
 ensureCacheDir().then(() => {
@@ -280,7 +280,6 @@ ensureCacheDir().then(() => {
       console.log("🔄 Chuyển sang polling...");
       bot.startPolling({ polling: true });
     }
-    // Không khởi tạo dữ liệu ngay, để lệnh đầu tiên kích hoạt
     console.log("✅ Bot đã sẵn sàng, chờ lệnh...");
   });
 });
@@ -312,7 +311,10 @@ bot.onText(/\/tuannay/, async (msg) => {
         await initializeBrowser();
       }
       console.log("🔄 Cập nhật dữ liệu...");
-      await updateAllData();
+      await Promise.race([
+        updateAllData(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout sau 60 giây")), 60000))
+      ]);
       const updatedCache = await loadFromCache(CACHE_FILE.schedules);
       const updatedLichHoc = updatedCache?.week0;
       if (!updatedLichHoc) throw new Error("Không thể lấy dữ liệu!");
@@ -350,7 +352,10 @@ bot.onText(/\/tuansau/, async (msg) => {
         await initializeBrowser();
       }
       console.log("🔄 Cập nhật dữ liệu...");
-      await updateAllData();
+      await Promise.race([
+        updateAllData(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout sau 60 giây")), 60000))
+      ]);
       const updatedCache = await loadFromCache(CACHE_FILE.schedules);
       const updatedLichHoc = updatedCache?.week1;
       if (!updatedLichHoc) throw new Error("Không thể lấy dữ liệu!");
@@ -387,7 +392,10 @@ bot.onText(/\/thongbao/, async (msg) => {
         await initializeBrowser();
       }
       console.log("🔄 Cập nhật dữ liệu...");
-      await updateAllData();
+      await Promise.race([
+        updateAllData(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout sau 60 giây")), 60000))
+      ]);
       const updatedNotifications = await loadFromCache(CACHE_FILE.notifications);
       if (!updatedNotifications) throw new Error("Không thể lấy dữ liệu!");
       if (!updatedNotifications.length) {
@@ -435,7 +443,10 @@ bot.onText(/\/congtac/, async (msg) => {
         await initializeBrowser();
       }
       console.log("🔄 Cập nhật dữ liệu...");
-      await updateAllData();
+      await Promise.race([
+        updateAllData(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout sau 60 giây")), 60000))
+      ]);
       const updatedCongTacData = await loadFromCache(CACHE_FILE.socialWork);
       if (!updatedCongTacData) throw new Error("Không thể lấy dữ liệu!");
       if (!updatedCongTacData.length) {
