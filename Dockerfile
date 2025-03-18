@@ -39,6 +39,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xdg-utils \
     wget \
     gnupg \
+    libvulkan1 \
+    libcurl4 \
     && rm -rf /var/lib/apt/lists/*
 
 # Tải và cài đặt Google Chrome với retry logic đơn giản
