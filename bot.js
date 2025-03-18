@@ -44,22 +44,28 @@ const bot = new TelegramBot(TOKEN);
 let browser;
 async function initializeBrowser() {
     try {
+        console.log("🔄 Đang khởi tạo trình duyệt Puppeteer...");
         browser = await puppeteer.launch({
             headless: 'new',
             args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
             executablePath: '/usr/bin/google-chrome-stable',
-            timeout: 10000,
+            timeout: 15000, // Tăng timeout lên 15 giây
         });
         console.log("✅ Trình duyệt Puppeteer đã được khởi tạo.");
     } catch (error) {
         console.error("❌ Lỗi khởi tạo Puppeteer với đường dẫn mặc định:", error.message);
         console.log("🔄 Thử tìm Chrome tự động...");
-        browser = await puppeteer.launch({
-            headless: 'new',
-            args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-            timeout: 10000,
-        });
-        console.log("✅ Trình duyệt Puppeteer đã được khởi tạo với phát hiện tự động.");
+        try {
+            browser = await puppeteer.launch({
+                headless: 'new',
+                args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+                timeout: 15000,
+            });
+            console.log("✅ Trình duyệt Puppeteer đã được khởi tạo với phát hiện tự động.");
+        } catch (fallbackError) {
+            console.error("❌ Lỗi khởi tạo Puppeteer (fallback):", fallbackError.message);
+            throw new Error("Không thể khởi tạo trình duyệt Puppeteer.");
+        }
     }
 }
 
@@ -76,14 +82,23 @@ const PORT = process.env.PORT || 10000;
 app.listen(PORT, async () => {
     console.log(`Server running on port ${PORT}`);
     const webhookUrl = `https://vhu-telegram-bot.onrender.com/bot${TOKEN}`;
-    bot.setWebHook(webhookUrl).then(() => {
-        console.log(`Webhook set to ${webhookUrl}`);
-    }).catch((error) => {
-        console.error("Lỗi khi thiết lập Webhook:", error);
-    });
+    try {
+        await bot.setWebHook(webhookUrl);
+        console.log(`✅ Webhook set to ${webhookUrl}`);
+    } catch (error) {
+        console.error("❌ Lỗi khi thiết lập Webhook:", error.message);
+        console.log("🔄 Chuyển sang chế độ polling...");
+        bot.startPolling({ polling: true });
+        console.log("✅ Đã chuyển sang chế độ polling.");
+    }
 
     // Khởi tạo trình duyệt khi server khởi động
-    await initializeBrowser();
+    try {
+        await initializeBrowser();
+    } catch (error) {
+        console.error("❌ Không thể khởi tạo trình duyệt khi server khởi động:", error.message);
+        process.exit(1);
+    }
 });
 
 // Hàm đăng nhập với tối ưu hóa
@@ -205,42 +220,51 @@ bot.onText(/\/start/, (msg) => {
 // Lệnh /tuannay
 bot.onText(/\/tuannay/, async (msg) => {
     const chatId = msg.chat.id;
-    console.log("Received /tuannay command from chat:", chatId);
-    bot.sendMessage(chatId, "📅 Đang lấy thông tin lịch học tuần này, vui lòng chờ trong giây lát ⌛...");
-
-    let page;
+    console.log(`Received /tuannay command from chat: ${chatId} at ${new Date().toISOString()}`);
     try {
-        if (!browser) {
-            await initializeBrowser();
-        }
-        page = await browser.newPage();
-        await page.setViewport({ width: 1280, height: 720 });
+        bot.sendMessage(chatId, "📅 Đang lấy thông tin lịch học tuần này, vui lòng chờ trong giây lát ⌛...");
 
-        await loginToPortal(page);
-        const lichHoc = await getSchedule(page, 0);
+        let page;
+        try {
+            if (!browser) {
+                console.log("Browser not initialized, reinitializing...");
+                await initializeBrowser();
+            }
+            page = await browser.newPage();
+            await page.setViewport({ width: 1280, height: 720 });
 
-        if (Object.keys(lichHoc).length === 0) {
-            bot.sendMessage(chatId, "❌ Không tìm thấy lịch học tuần này.");
-        } else {
-            let message = "📅 *Lịch học tuần này của bạn:*\n *------------------------------------* \n";
-            Object.entries(lichHoc).forEach(([ngay, monHocs]) => {
-                message += `📌 *Ngày:* ${ngay}\n`;
-                if (monHocs.length > 0) {
-                    monHocs.forEach((monHoc) => {
-                        message += `📖 *Phòng học - Môn học:* ${monHoc}\n\n`;
-                    });
-                } else {
-                    message += "❌ Không có lịch học.\n";
-                }
-                message += "\n";
-            });
-            bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+            await loginToPortal(page);
+            const lichHoc = await getSchedule(page, 0);
+
+            if (Object.keys(lichHoc).length === 0) {
+                bot.sendMessage(chatId, "❌ Không tìm thấy lịch học tuần này.");
+            } else {
+                let message = "📅 *Lịch học tuần này của bạn:*\n *------------------------------------* \n";
+                Object.entries(lichHoc).forEach(([ngay, monHocs]) => {
+                    message += `📌 *Ngày:* ${ngay}\n`;
+                    if (monHocs.length > 0) {
+                        monHocs.forEach((monHoc) => {
+                            message += `📖 *Phòng học - Môn học:* ${monHoc}\n\n`;
+                        });
+                    } else {
+                        message += "❌ Không có lịch học.\n";
+                    }
+                    message += "\n";
+                });
+                bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+            }
+        } catch (error) {
+            console.error(`❌ Lỗi khi xử lý lệnh /tuannay cho chat ${chatId}:`, error.message);
+            bot.sendMessage(chatId, `❌ Lỗi khi lấy lịch học tuần này: ${error.message} (Thời gian tối đa 1 phút)`);
+        } finally {
+            if (page) {
+                await page.close();
+                console.log(`Page closed for chat ${chatId}`);
+            }
         }
     } catch (error) {
-        bot.sendMessage(chatId, `❌ Lỗi khi lấy lịch học tuần này: ${error.message} (Thời gian tối đa 1 phút)`);
-        console.error(error);
-    } finally {
-        if (page) await page.close();
+        console.error(`❌ Lỗi ngoài cùng khi xử lý /tuannay cho chat ${chatId}:`, error.message);
+        bot.sendMessage(chatId, `❌ Đã xảy ra lỗi không mong muốn: ${error.message}`);
     }
 });
 
