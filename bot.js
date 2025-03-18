@@ -4,11 +4,21 @@ const express = require("express");
 const puppeteer = require("puppeteer");
 const fs = require("fs").promises;
 
+// Khởi tạo Express và Bot
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const app = express();
 app.use(express.json());
 const bot = new TelegramBot(TOKEN);
 
+// Xử lý lỗi toàn cục để tránh crash
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("❌ Unhandled Rejection at:", promise, "reason:", reason);
+});
+process.on("uncaughtException", (error) => {
+  console.error("❌ Uncaught Exception:", error.message);
+});
+
+// Khởi tạo trình duyệt toàn cục và file cache
 let browser;
 let page;
 const CACHE_FILE = {
@@ -16,7 +26,7 @@ const CACHE_FILE = {
   notifications: "./cache_notifications.json",
   socialWork: "./cache_socialWork.json",
 };
-const CACHE_DURATION = 2 * 60 * 60 * 1000;
+const CACHE_DURATION = 2 * 60 * 60 * 1000; // 2 giờ
 
 async function loadFromCache(file) {
   try {
@@ -81,7 +91,7 @@ async function initializeBrowser(maxRetries = 3) {
       if (browser) await browser.close();
       browser = null;
       if (attempt === maxRetries) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 5000));
+      await new Promise((resolve) => setTimeout(resolve, 5000)); // Chờ 5 giây trước khi thử lại
     }
   }
 }
@@ -120,7 +130,7 @@ async function getSchedule(weekOffset = 0) {
       timeout: 5000,
       waitUntil: "networkidle0",
     });
-    await page.waitForSelector(".MuiTable-root", { timeout: 3000 });
+    await page.waitForSelector(".MuiTable-root", { timeout: 5000 });
 
     const yearDropdown = 'div[role="button"][id="demo-simple-select-helper"]';
     await page.click(yearDropdown);
@@ -133,7 +143,7 @@ async function getSchedule(weekOffset = 0) {
       if (semester) semester.click();
     });
 
-    await page.waitForSelector(".MuiTable-root tbody tr", { timeout: 3000 });
+    await page.waitForSelector(".MuiTable-root tbody tr", { timeout: 5000 });
     const lichHoc = await page.evaluate(() => {
       const monHocTheoNgay = {};
       const headers = document.querySelectorAll(".MuiTable-root thead th");
@@ -171,7 +181,7 @@ async function getNotifications() {
       timeout: 5000,
       waitUntil: "networkidle0",
     });
-    await page.waitForSelector("table.MuiTable-root", { timeout: 3000 });
+    await page.waitForSelector("table.MuiTable-root", { timeout: 5000 });
 
     const notifications = await page.evaluate(() => {
       const items = document.querySelectorAll("table.MuiTable-root tbody tr");
@@ -200,7 +210,7 @@ async function getSocialWork() {
       timeout: 5000,
       waitUntil: "networkidle0",
     });
-    await page.waitForSelector("table.MuiTable-root", { timeout: 3000 });
+    await page.waitForSelector("table.MuiTable-root", { timeout: 5000 });
 
     const yearDropdown = 'div[role="button"][id="demo-simple-select-helper"]';
     await page.click(yearDropdown);
@@ -213,7 +223,7 @@ async function getSocialWork() {
       if (semester) semester.click();
     });
 
-    await page.waitForSelector("table.MuiTable-root tbody tr", { timeout: 3000 });
+    await page.waitForSelector("table.MuiTable-root tbody tr", { timeout: 5000 });
     const congTacData = await page.evaluate(() => {
       const rows = document.querySelectorAll("table.MuiTable-root tbody tr");
       return Array.from(rows).map((row) => {
@@ -255,17 +265,21 @@ async function updateAllData() {
 
 const PORT = process.env.PORT || 10000;
 app.post(`/bot${TOKEN}`, (req, res) => {
+  console.log("📩 Nhận request webhook:", req.body);
   bot.processUpdate(req.body);
   res.sendStatus(200);
 });
-app.get("/ping", (req, res) => res.send("Bot is alive!"));
+app.get("/ping", (req, res) => {
+  console.log("📡 Nhận ping từ Render");
+  res.send("Bot is alive!");
+});
 
 ensureCacheDir().then(() => {
   app.listen(PORT, async () => {
     console.log(`Server chạy trên port ${PORT}`);
     process.env.PORT = PORT;
-    const webhookUrl = `https://vhu-telegram-bot.onrender.com/bot${TOKEN}`;
     try {
+      const webhookUrl = `https://vhu-telegram-bot.onrender.com/bot${TOKEN}`;
       await bot.setWebHook(webhookUrl);
       console.log(`✅ Webhook đã đặt: ${webhookUrl}`);
     } catch (error) {
@@ -273,7 +287,7 @@ ensureCacheDir().then(() => {
       console.log("🔄 Chuyển sang polling...");
       bot.startPolling({ polling: true });
     }
-    setInterval(updateAllData, 60 * 60 * 1000);
+    // Không khởi tạo dữ liệu ngay, để lệnh đầu tiên kích hoạt
   });
 });
 
