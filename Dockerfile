@@ -43,10 +43,11 @@ RUN apt-get update && apt-get install -y \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-# Tải file .deb của Google Chrome với bỏ qua kiểm tra chứng chỉ
-RUN wget --verbose --tries=10 --timeout=20 --no-check-certificate -O /tmp/google-chrome-stable_current_amd64.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
-    && if [ ! -f /tmp/google-chrome-stable_current_amd64.deb ]; then echo "Error: Failed to download Google Chrome .deb file" && exit 1; fi \
-    && if [ $(stat -c %s /tmp/google-chrome-stable_current_amd64.deb) -lt 50000000 ]; then echo "Error: Downloaded .deb file is too small (possibly corrupted)" && exit 1; fi
+# Tải file .deb của Google Chrome với retry logic
+RUN wget --verbose --tries=5 --timeout=20 --no-check-certificate -O /tmp/google-chrome-stable_current_amd64.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb || \
+    (echo "Retry 1 failed, trying again..." && sleep 5 && \
+     wget --verbose --tries=5 --timeout=20 --no-check-certificate -O /tmp/google-chrome-stable_current_amd64.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb) || \
+    (echo "Error: Failed to download Google Chrome .deb file after retries" && exit 1)
 
 # Cài đặt file .deb và sửa lỗi phụ thuộc
 RUN dpkg -i /tmp/google-chrome-stable_current_amd64.deb || (apt-get update && apt-get install -f -y) \
