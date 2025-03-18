@@ -42,14 +42,21 @@ RUN apt-get update && apt-get install -y \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-# Tải và cài đặt Google Chrome trực tiếp từ file .deb với thử lại nếu thất bại
-RUN wget --quiet --tries=3 -O /tmp/google-chrome-stable_current_amd64.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+# Tải file .deb của Google Chrome với thử lại và timeout
+RUN wget --quiet --tries=5 --timeout=10 -O /tmp/google-chrome-stable_current_amd64.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
     && if [ ! -f /tmp/google-chrome-stable_current_amd64.deb ]; then echo "Error: Failed to download Google Chrome .deb file" && exit 1; fi \
-    && dpkg -i /tmp/google-chrome-stable_current_amd64.deb || apt-get update && apt-get install -f -y \
+    && if [ $(stat -c %s /tmp/google-chrome-stable_current_amd64.deb) -lt 50000000 ]; then echo "Error: Downloaded .deb file is too small (possibly corrupted)" && exit 1; fi
+
+# Cài đặt file .deb và sửa lỗi phụ thuộc
+RUN dpkg -i /tmp/google-chrome-stable_current_amd64.deb || (apt-get update && apt-get install -f -y) \
     && rm /tmp/google-chrome-stable_current_amd64.deb \
     && rm -rf /var/lib/apt/lists/*
 
-# Xác minh Chrome được cài đặt
+# Debug đường dẫn Chrome
+RUN echo "Checking Chrome installation path..." \
+    && find / -name "google-chrome-stable" 2>/dev/null || echo "Chrome not found in any path"
+
+# Xác minh Chrome được cài đặt tại đường dẫn mong muốn
 RUN if [ ! -f /usr/bin/google-chrome-stable ]; then echo "Error: Google Chrome not found at /usr/bin/google-chrome-stable" && exit 1; fi
 
 # Copy package.json và cài đặt dependencies
