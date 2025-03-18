@@ -4,14 +4,19 @@ const express = require("express");
 const axios = require("axios");
 const fs = require("fs").promises;
 const NodeCache = require("node-cache");
-const axiosRetry = require("axios-retry");
+
+// Import và cấu hình axios-retry
+const axiosRetry = require("axios-retry").default;
+axiosRetry(axios, {
+  retries: 3,
+  retryDelay: (retryCount) => retryCount * 1000,
+  retryCondition: (error) => error.response?.status === 401 || error.code === "ECONNABORTED",
+});
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const app = express();
 app.use(express.json());
 const bot = new TelegramBot(TOKEN);
-
-axiosRetry(axios, { retries: 3, retryDelay: (retryCount) => retryCount * 1000, retryCondition: (error) => error.response?.status === 401 || error.code === "ECONNABORTED" });
 
 process.on("unhandledRejection", (reason, promise) => {
   console.error("❌ Unhandled Rejection at:", promise, "reason:", reason);
