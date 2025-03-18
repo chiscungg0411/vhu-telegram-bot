@@ -49,9 +49,9 @@ async function initializeBrowser() {
             headless: 'new',
             args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
             executablePath: '/usr/bin/google-chrome-stable',
-            timeout: 15000, // Tăng timeout lên 15 giây
+            timeout: 15000,
         });
-        console.log("✅ Trình duyệt Puppeteer đã được khởi tạo.");
+        console.log("✅ Trình duyệt Puppeteer đã được khởi tạo với /usr/bin/google-chrome-stable.");
     } catch (error) {
         console.error("❌ Lỗi khởi tạo Puppeteer với đường dẫn mặc định:", error.message);
         console.log("🔄 Thử tìm Chrome tự động...");
