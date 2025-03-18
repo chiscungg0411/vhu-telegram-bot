@@ -1,16 +1,14 @@
 require("dotenv").config();
 const TelegramBot = require("node-telegram-bot-api");
 const express = require("express");
-const puppeteer = require("puppeteer-core");
+const axios = require("axios");
 const fs = require("fs").promises;
 
-// Khởi tạo Express và Bot
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const app = express();
 app.use(express.json());
 const bot = new TelegramBot(TOKEN);
 
-// Xử lý lỗi toàn cục
 process.on("unhandledRejection", (reason, promise) => {
   console.error("❌ Unhandled Rejection at:", promise, "reason:", reason);
 });
@@ -18,15 +16,14 @@ process.on("uncaughtException", (error) => {
   console.error("❌ Uncaught Exception:", error.message);
 });
 
-// Khởi tạo trình duyệt toàn cục và file cache
-let browser;
-let page;
 const CACHE_FILE = {
   schedules: "./cache_schedules.json",
+  weeks: "./cache_weeks.json",
+  yearandterm: "./cache_yearandterm.json",
   notifications: "./cache_notifications.json",
   socialWork: "./cache_socialWork.json",
 };
-const CACHE_DURATION = 2 * 60 * 60 * 1000; // 2 giờ
+const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 giờ
 
 async function loadFromCache(file) {
   try {
@@ -57,235 +54,155 @@ async function ensureCacheDir() {
   }
 }
 
-async function initializeBrowser(maxRetries = 3) {
-  if (browser && !browser.isConnected()) {
-    await browser.close();
-    browser = null;
-  }
-  if (browser) return;
-  let attempt = 0;
-  while (attempt < maxRetries) {
-    attempt++;
-    console.log(`🔄 Khởi tạo trình duyệt Puppeteer (lần ${attempt})...`);
-    try {
-      browser = await puppeteer.launch({
-        headless: "new",
-        args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--disable-dev-shm-usage",
-          "--disable-gpu",
-        ],
-        executablePath: process.env.CHROME_PATH || "/usr/bin/google-chrome-stable",
-        timeout: 30000, // Giảm timeout xuống 30 giây
-      });
-      page = await browser.newPage();
-      await page.setViewport({ width: 1280, height: 720 });
-      console.log("✅ Trình duyệt đã khởi tạo thành công.");
-      return;
-    } catch (error) {
-      console.error(`❌ Lỗi khởi tạo trình duyệt (lần ${attempt}):`, error.message);
-      if (browser) await browser.close();
-      browser = null;
-      if (attempt === maxRetries) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 2000)); // Giảm thời gian chờ retry xuống 2 giây
-    }
-  }
-}
+const API_BASE = "https://portal_api.vhu.edu.vn/api/student";
+const AUTH_TOKEN = process.env.API_AUTH_TOKEN;
 
-process.on("SIGINT", async () => {
-  if (browser) {
-    await browser.close();
-    console.log("✅ Trình duyệt đã đóng.");
-  }
-  process.exit();
-});
-
-async function loginToPortal(page) {
+async function fetchData(endpoint, params = {}) {
   try {
-    await page.goto("https://portal.vhu.edu.vn/login", { timeout: 5000, waitUntil: "domcontentloaded" });
-    console.log("✅ Trang đăng nhập đã tải...");
-    await page.waitForSelector("input[name='email']", { timeout: 5000 });
-    await page.type("input[name='email']", process.env.VHU_EMAIL);
-    await page.type("input[name='password']", process.env.VHU_PASSWORD);
-    await Promise.all([
-      page.click("button[type='submit']"),
-      page.waitForNavigation({ timeout: 10000, waitUntil: "domcontentloaded" }),
-    ]);
-
-    if (page.url().includes("login")) throw new Error("Sai tài khoản hoặc mật khẩu!");
-    console.log("✅ Đăng nhập thành công!");
+    const response = await axios.get(`${API_BASE}${endpoint}`, {
+      headers: { Authorization: AUTH_TOKEN },
+      params,
+    });
+    return response.data;
   } catch (error) {
-    console.error("❌ Lỗi đăng nhập:", error.message);
+    console.error(`❌ Lỗi gọi API ${endpoint}:`, error.message);
     throw error;
   }
 }
 
+// Lấy danh sách tuần
+async function getWeeks() {
+  const cached = await loadFromCache(CACHE_FILE.weeks);
+  if (cached) return cached;
+
+  const data = await fetchData("/weeks"); // Thay bằng endpoint thực tế
+  await saveToCache(CACHE_FILE.weeks, data);
+  console.log("✅ Đã cập nhật danh sách tuần");
+  return data;
+}
+
+// Lấy năm và kỳ học
+async function getYearAndTerm() {
+  const cached = await loadFromCache(CACHE_FILE.yearandterm);
+  if (cached) return cached;
+
+  const data = await fetchData("/yearandterm");
+  await saveToCache(CACHE_FILE.yearandterm, data);
+  console.log("✅ Đã cập nhật năm và kỳ học");
+  return data;
+}
+
+// Tính tuần hiện tại dựa trên ngày
+function getCurrentWeek(weeks) {
+  const now = new Date();
+  const currentDate = now.toLocaleDateString("en-GB"); // Định dạng dd/mm/yyyy
+  return weeks.find(w => {
+    const [beginDay, beginMonth, beginYear] = w.BeginDate.split("/");
+    const [endDay, endMonth, endYear] = w.EndDate.split("/");
+    const begin = new Date(`${beginYear}-${beginMonth}-${beginDay}`);
+    const end = new Date(`${endYear}-${endMonth}-${endDay}`);
+    return now >= begin && now <= end;
+  })?.Week || 12; // Mặc định tuần 12 nếu không tìm thấy
+}
+
+// Lấy lịch học
 async function getSchedule(weekOffset = 0) {
-  try {
-    await page.goto("https://portal.vhu.edu.vn/student/schedules", {
-      timeout: 5000,
-      waitUntil: "domcontentloaded",
-    });
-    await page.waitForSelector(".MuiTable-root", { timeout: 5000 });
+  const weeks = await getWeeks();
+  const currentWeek = getCurrentWeek(weeks) + weekOffset;
+  const { CurrentYear, CurrentTerm } = await getYearAndTerm();
+  const params = {
+    namhoc: CurrentYear,
+    hocky: CurrentTerm,
+    tuan: currentWeek,
+  };
+  const data = await fetchData("/DrawingSchedules", params);
+  const lichHoc = processScheduleData(data, weeks.find(w => w.Week === currentWeek));
+  const cached = (await loadFromCache(CACHE_FILE.schedules)) || {};
+  cached[`week${weekOffset}`] = lichHoc;
+  await saveToCache(CACHE_FILE.schedules, cached);
+  console.log(`✅ Đã cập nhật lịch học tuần ${currentWeek}`);
+  return lichHoc;
+}
 
-    const yearDropdown = 'div[role="button"][id="demo-simple-select-helper"]';
-    await page.click(yearDropdown);
-    await page.evaluate(() => document.querySelector('li[data-value="2024-2025"]')?.click());
-    const dropdowns = await page.$$(yearDropdown);
-    if (dropdowns.length > 1) {
-      await dropdowns[1].click();
-      await page.evaluate(() => document.querySelector('li[data-value="2"]')?.click());
-    }
-
-    await page.waitForSelector(".MuiTable-root tbody tr", { timeout: 5000 });
-    const lichHoc = await page.evaluate(() => {
-      const monHocTheoNgay = {};
-      const headers = Array.from(document.querySelectorAll(".MuiTable-root thead th"))
-        .slice(1) // Bỏ cột đầu tiên nếu không cần
-        .map(th => th.innerText.trim());
-      const rows = document.querySelectorAll(".MuiTable-root tbody tr");
-      rows.forEach((row) => {
-        const cells = Array.from(row.querySelectorAll("td")).slice(1); // Bỏ cột đầu tiên
-        cells.forEach((cell, i) => {
-          if (cell.innerText.trim()) {
-            const ngay = headers[i] || `Ngày ${i + 1}`;
-            if (!monHocTheoNgay[ngay]) monHocTheoNgay[ngay] = [];
-            monHocTheoNgay[ngay].push(cell.innerText.trim().split("\n").join(" - "));
-          }
-        });
+// Xử lý dữ liệu lịch học
+function processScheduleData(apiData, weekData) {
+  const monHocTheoNgay = {};
+  if (apiData.ResultDataSchedule) {
+    apiData.ResultDataSchedule.forEach(schedule => {
+      const ngay = schedule.DayName || schedule.Thu;
+      if (!monHocTheoNgay[ngay]) monHocTheoNgay[ngay] = [];
+      monHocTheoNgay[ngay].push({
+        subject: schedule.CurriculumName,
+        time: schedule.CaHoc,
+        room: schedule.RoomID.replace("</br>", " - "),
+        professor: schedule.ProfessorName,
       });
-      return monHocTheoNgay;
     });
-
-    const cached = (await loadFromCache(CACHE_FILE.schedules)) || {};
-    cached[`week${weekOffset}`] = lichHoc;
-    await saveToCache(CACHE_FILE.schedules, cached);
-    console.log(`✅ Đã cập nhật lịch học tuần ${weekOffset} (thời gian nhanh hơn)`);
-    return lichHoc;
-  } catch (error) {
-    console.error(`❌ Lỗi lấy lịch học tuần ${weekOffset}:`, error.message);
-    throw error;
+  } else {
+    monHocTheoNgay["Lịch học"] = ["❌ Dữ liệu không hợp lệ"];
   }
+  return { schedule: monHocTheoNgay, week: weekData };
 }
 
+// Lấy thông báo
 async function getNotifications() {
-  try {
-    await page.goto("https://portal.vhu.edu.vn/student/index", {
-      timeout: 5000,
-      waitUntil: "domcontentloaded",
-    });
-    await page.waitForSelector("table.MuiTable-root", { timeout: 5000 });
+  const cached = await loadFromCache(CACHE_FILE.notifications);
+  if (cached) return cached;
 
-    const notifications = await page.evaluate(() => {
-      const items = document.querySelectorAll("table.MuiTable-root tbody tr");
-      return Array.from(items)
-        .map((row) => {
-          const title = row.querySelector("td a.css-1qeq5on")?.innerText.trim();
-          const sender = row.querySelector("td:nth-child(2)")?.innerText.trim();
-          const date = row.querySelector("td:nth-child(3)")?.innerText.trim();
-          return title ? { title, sender, date } : null;
-        })
-        .filter(Boolean)
-        .slice(0, 10); // Giới hạn số lượng để tăng tốc
-    });
-
-    await saveToCache(CACHE_FILE.notifications, notifications);
-    console.log("✅ Đã cập nhật thông báo (thời gian nhanh hơn)");
-    return notifications;
-  } catch (error) {
-    console.error("❌ Lỗi lấy thông báo:", error.message);
-    throw error;
-  }
+  const data = await fetchData("/notifications"); // Thay bằng endpoint thực tế
+  const sortedData = data.sort((a, b) => new Date(b.CreationDate) - new Date(a.CreationDate));
+  await saveToCache(CACHE_FILE.notifications, sortedData);
+  console.log("✅ Đã cập nhật thông báo");
+  return sortedData;
 }
 
+// Lấy công tác xã hội
 async function getSocialWork() {
-  try {
-    await page.goto("https://portal.vhu.edu.vn/student/congtacxahoi", {
-      timeout: 5000,
-      waitUntil: "domcontentloaded",
-    });
-    await page.waitForSelector("table.MuiTable-root", { timeout: 5000 });
+  const cached = await loadFromCache(CACHE_FILE.socialWork);
+  if (cached) return cached;
 
-    const yearDropdown = 'div[role="button"][id="demo-simple-select-helper"]';
-    await page.click(yearDropdown);
-    await page.evaluate(() => document.querySelector('li[data-value="2024-2025"]')?.click());
-    const dropdowns = await page.$$(yearDropdown);
-    if (dropdowns.length > 1) {
-      await dropdowns[1].click();
-      await page.evaluate(() => document.querySelector('li[data-value="2"]')?.click());
-    }
-
-    await page.waitForSelector("table.MuiTable-root tbody tr", { timeout: 5000 });
-    const congTacData = await page.evaluate(() => {
-      const rows = document.querySelectorAll("table.MuiTable-root tbody tr");
-      return Array.from(rows)
-        .map((row) => {
-          const cols = row.querySelectorAll("td");
-          return {
-            suKien: cols[1]?.innerText.trim() || "Không có thông tin",
-            diaDiem: cols[2]?.innerText.trim() || "Không có thông tin",
-            soLuongDK: cols[3]?.innerText.trim() || "Không có thông tin",
-            diem: cols[4]?.innerText.trim() || "Không có thông tin",
-            batDau: cols[5]?.innerText.trim() || "Không có thông tin",
-            ketThuc: cols[6]?.innerText.trim() || "Chưa có",
-          };
-        })
-        .slice(0, 10); // Giới hạn số lượng để tăng tốc
-    });
-
-    await saveToCache(CACHE_FILE.socialWork, congTacData);
-    console.log("✅ Đã cập nhật công tác xã hội (thời gian nhanh hơn)");
-    return congTacData;
-  } catch (error) {
-    console.error("❌ Lỗi lấy công tác xã hội:", error.message);
-    throw error;
-  }
+  const data = await fetchData("/socialWork"); // Thay bằng endpoint thực tế
+  const sortedData = data.result.sort((a, b) => new Date(b.UpdateDate) - new Date(a.UpdateDate));
+  await saveToCache(CACHE_FILE.socialWork, sortedData);
+  console.log("✅ Đã cập nhật công tác xã hội");
+  return sortedData;
 }
 
 async function updateAllData() {
   try {
-    if (!browser || !page) await initializeBrowser();
-    await loginToPortal(page); // Đăng nhập một lần duy nhất
     const [schedule0, schedule1, notifications, socialWork] = await Promise.all([
       getSchedule(0),
       getSchedule(1),
       getNotifications(),
       getSocialWork(),
     ]);
-    console.log("✅ Đã cập nhật toàn bộ dữ liệu vào cache (song song)");
+    console.log("✅ Đã cập nhật toàn bộ dữ liệu vào cache");
     return { schedule0, schedule1, notifications, socialWork };
   } catch (error) {
     console.error("❌ Lỗi cập nhật dữ liệu:", error.message);
-    if (browser) await browser.close();
-    browser = null;
     throw error;
   }
 }
 
 const PORT = process.env.PORT || 10000;
 app.post(`/bot${TOKEN}`, (req, res) => {
-  console.log("📩 Nhận request webhook:", req.body);
   bot.processUpdate(req.body);
   res.sendStatus(200);
 });
 app.get("/ping", (req, res) => {
-  console.log("📡 Nhận ping từ Render");
   res.status(200).send("Bot is alive!");
 });
 
 ensureCacheDir().then(() => {
   app.listen(PORT, async () => {
     console.log(`Server chạy trên port ${PORT}`);
-    process.env.PORT = PORT;
     try {
       const webhookUrl = `https://vhu-telegram-bot.onrender.com/bot${TOKEN}`;
       await bot.setWebHook(webhookUrl);
       console.log(`✅ Webhook đã đặt: ${webhookUrl}`);
     } catch (error) {
       console.error("❌ Lỗi thiết lập webhook:", error.message);
-      console.log("🔄 Chuyển sang polling...");
-      bot.startPolling({ polling: true });
+      bot.startPolling();
     }
     console.log("✅ Bot đã sẵn sàng, chờ lệnh...");
   });
@@ -293,198 +210,118 @@ ensureCacheDir().then(() => {
 
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
-  console.log(`📩 Nhận lệnh /start từ chat ${chatId}`);
-  bot.sendMessage(
-    chatId,
-    "👋 Xin chào! Mình là Trợ lý VHU.\n" +
-      "📅 /tuannay - Lịch học tuần này\n" +
-      "📅 /tuansau - Lịch học tuần sau\n" +
-      "🔔 /thongbao - Danh sách thông báo\n" +
-      "📋 /congtac - Công tác xã hội"
-  );
+  bot.sendMessage(chatId, "👋 Xin chào! Mình là Trợ lý VHU.\n📅 /tuannay\n📅 /tuansau\n🔔 /thongbao\n📋 /congtac");
 });
 
 bot.onText(/\/tuannay/, async (msg) => {
   const chatId = msg.chat.id;
-  console.log(`📩 Nhận lệnh /tuannay từ chat ${chatId}`);
   const cached = await loadFromCache(CACHE_FILE.schedules);
   const lichHoc = cached?.week0;
   if (!lichHoc) {
-    console.log("📅 Cache trống, bắt đầu khởi tạo dữ liệu...");
-    bot.sendMessage(chatId, "📅 Đang tải dữ liệu, vui lòng đợi vài giây...");
+    bot.sendMessage(chatId, "📅 Đang tải dữ liệu...");
     try {
-      if (!browser || !page) {
-        console.log("🔄 Khởi tạo browser...");
-        await initializeBrowser();
-      }
-      console.log("🔄 Cập nhật dữ liệu...");
-      await Promise.race([
-        updateAllData(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout sau 30 giây")), 30000))
-      ]);
+      await updateAllData();
       const updatedCache = await loadFromCache(CACHE_FILE.schedules);
       const updatedLichHoc = updatedCache?.week0;
-      if (!updatedLichHoc) throw new Error("Không thể lấy dữ liệu!");
-      let message = "📅 *Lịch học tuần này:*\n*------------------------------------*\n";
-      for (const [ngay, monHocs] of Object.entries(updatedLichHoc)) {
-        message += `📌 *${ngay}:*\n${monHocs.length ? monHocs.map((m) => `📖 ${m}`).join("\n") : "❌ Không có lịch"}\n\n`;
+      let message = `📅 *Lịch học tuần ${updatedLichHoc.week.DisPlayWeek || 'này'}: ${updatedLichHoc.week.BeginDate} - ${updatedLichHoc.week.EndDate}*\n*------------------------------------*\n`;
+      for (const [ngay, monHocs] of Object.entries(updatedLichHoc.schedule)) {
+        message += `📌 *${ngay}:*\n${monHocs.length ? monHocs.map(m => `📖 ${m.subject} (${m.time} - ${m.room}, GV: ${m.professor})`).join("\n") : "❌ Không có lịch"}\n\n`;
       }
-      console.log("✅ Gửi phản hồi thành công (nhanh hơn)");
       bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
     } catch (error) {
-      console.error("❌ Lỗi xử lý /tuannay:", error.message);
       bot.sendMessage(chatId, `❌ Lỗi: ${error.message}`);
     }
     return;
   }
-  let message = "📅 *Lịch học tuần này:*\n*------------------------------------*\n";
-  for (const [ngay, monHocs] of Object.entries(lichHoc)) {
-    message += `📌 *${ngay}:*\n${monHocs.length ? monHocs.map((m) => `📖 ${m}`).join("\n") : "❌ Không có lịch"}\n\n`;
+  let message = `📅 *Lịch học tuần ${lichHoc.week.DisPlayWeek || 'này'}: ${lichHoc.week.BeginDate} - ${lichHoc.week.EndDate}*\n*------------------------------------*\n`;
+  for (const [ngay, monHocs] of Object.entries(lichHoc.schedule)) {
+    message += `📌 *${ngay}:*\n${monHocs.length ? monHocs.map(m => `📖 ${m.subject} (${m.time} - ${m.room}, GV: ${m.professor})`).join("\n") : "❌ Không có lịch"}\n\n`;
   }
-  console.log("✅ Gửi phản hồi từ cache (ngay lập tức)");
   bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
 });
 
 bot.onText(/\/tuansau/, async (msg) => {
   const chatId = msg.chat.id;
-  console.log(`📩 Nhận lệnh /tuansau từ chat ${chatId}`);
   const cached = await loadFromCache(CACHE_FILE.schedules);
   const lichHoc = cached?.week1;
   if (!lichHoc) {
-    console.log("📅 Cache trống, bắt đầu khởi tạo dữ liệu...");
-    bot.sendMessage(chatId, "📅 Đang tải dữ liệu, vui lòng đợi vài giây...");
+    bot.sendMessage(chatId, "📅 Đang tải dữ liệu...");
     try {
-      if (!browser || !page) {
-        console.log("🔄 Khởi tạo browser...");
-        await initializeBrowser();
-      }
-      console.log("🔄 Cập nhật dữ liệu...");
-      await Promise.race([
-        updateAllData(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout sau 30 giây")), 30000))
-      ]);
+      await updateAllData();
       const updatedCache = await loadFromCache(CACHE_FILE.schedules);
       const updatedLichHoc = updatedCache?.week1;
-      if (!updatedLichHoc) throw new Error("Không thể lấy dữ liệu!");
-      let message = "📅 *Lịch học tuần sau:*\n*------------------------------------*\n";
-      for (const [ngay, monHocs] of Object.entries(updatedLichHoc)) {
-        message += `📌 *${ngay}:*\n${monHocs.length ? monHocs.map((m) => `📖 ${m}`).join("\n") : "❌ Không có lịch"}\n\n`;
+      let message = `📅 *Lịch học tuần ${updatedLichHoc.week.DisPlayWeek || 'sau'}: ${updatedLichHoc.week.BeginDate} - ${updatedLichHoc.week.EndDate}*\n*------------------------------------*\n`;
+      for (const [ngay, monHocs] of Object.entries(updatedLichHoc.schedule)) {
+        message += `📌 *${ngay}:*\n${monHocs.length ? monHocs.map(m => `📖 ${m.subject} (${m.time} - ${m.room}, GV: ${m.professor})`).join("\n") : "❌ Không có lịch"}\n\n`;
       }
-      console.log("✅ Gửi phản hồi thành công (nhanh hơn)");
       bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
     } catch (error) {
-      console.error("❌ Lỗi xử lý /tuansau:", error.message);
       bot.sendMessage(chatId, `❌ Lỗi: ${error.message}`);
     }
     return;
   }
-  let message = "📅 *Lịch học tuần sau:*\n*------------------------------------*\n";
-  for (const [ngay, monHocs] of Object.entries(lichHoc)) {
-    message += `📌 *${ngay}:*\n${monHocs.length ? monHocs.map((m) => `📖 ${m}`).join("\n") : "❌ Không có lịch"}\n\n`;
+  let message = `📅 *Lịch học tuần ${lichHoc.week.DisPlayWeek || 'sau'}: ${lichHoc.week.BeginDate} - ${lichHoc.week.EndDate}*\n*------------------------------------*\n`;
+  for (const [ngay, monHocs] of Object.entries(lichHoc.schedule)) {
+    message += `📌 *${ngay}:*\n${monHocs.length ? monHocs.map(m => `📖 ${m.subject} (${m.time} - ${m.room}, GV: ${m.professor})`).join("\n") : "❌ Không có lịch"}\n\n`;
   }
-  console.log("✅ Gửi phản hồi từ cache (ngay lập tức)");
   bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
 });
 
 bot.onText(/\/thongbao/, async (msg) => {
   const chatId = msg.chat.id;
-  console.log(`📩 Nhận lệnh /thongbao từ chat ${chatId}`);
   const notifications = await loadFromCache(CACHE_FILE.notifications);
   if (!notifications) {
-    console.log("🔔 Cache trống, bắt đầu khởi tạo dữ liệu...");
-    bot.sendMessage(chatId, "🔔 Đang tải dữ liệu, vui lòng đợi vài giây...");
+    bot.sendMessage(chatId, "🔔 Đang tải dữ liệu...");
     try {
-      if (!browser || !page) {
-        console.log("🔄 Khởi tạo browser...");
-        await initializeBrowser();
-      }
-      console.log("🔄 Cập nhật dữ liệu...");
-      await Promise.race([
-        updateAllData(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout sau 30 giây")), 30000))
-      ]);
+      await updateAllData();
       const updatedNotifications = await loadFromCache(CACHE_FILE.notifications);
-      if (!updatedNotifications) throw new Error("Không thể lấy dữ liệu!");
-      if (!updatedNotifications.length) {
-        bot.sendMessage(chatId, "🔔 Không có thông báo nào.");
-        return;
-      }
-      const limited = updatedNotifications.slice(0, 5);
       let message = "🔔 *Thông báo mới nhất:*\n*------------------------------------*\n";
-      limited.forEach((n, i) => {
-        message += `📢 *${i + 1}. ${n.title}*\n📩 ${n.sender}\n⏰ ${n.date}\n\n`;
+      updatedNotifications.slice(0, 5).forEach((n, i) => {
+        message += `📢 *${i + 1}. ${n.MessageSubject}*\n📩 ${n.SenderName || 'Không rõ'}\n⏰ ${n.CreationDate || 'Không rõ'}\n\n`;
       });
       if (updatedNotifications.length > 5) message += `📢 Còn ${updatedNotifications.length - 5} thông báo khác.`;
-      console.log("✅ Gửi phản hồi thành công (nhanh hơn)");
       bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
     } catch (error) {
-      console.error("❌ Lỗi xử lý /thongbao:", error.message);
       bot.sendMessage(chatId, `❌ Lỗi: ${error.message}`);
     }
     return;
   }
-  if (!notifications.length) {
-    bot.sendMessage(chatId, "🔔 Không có thông báo nào.");
-    return;
-  }
-  const limited = notifications.slice(0, 5);
   let message = "🔔 *Thông báo mới nhất:*\n*------------------------------------*\n";
-  limited.forEach((n, i) => {
-    message += `📢 *${i + 1}. ${n.title}*\n📩 ${n.sender}\n⏰ ${n.date}\n\n`;
+  notifications.slice(0, 5).forEach((n, i) => {
+    message += `📢 *${i + 1}. ${n.MessageSubject}*\n📩 ${n.SenderName || 'Không rõ'}\n⏰ ${n.CreationDate || 'Không rõ'}\n\n`;
   });
   if (notifications.length > 5) message += `📢 Còn ${notifications.length - 5} thông báo khác.`;
-  console.log("✅ Gửi phản hồi từ cache (ngay lập tức)");
   bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
 });
 
 bot.onText(/\/congtac/, async (msg) => {
   const chatId = msg.chat.id;
-  console.log(`📩 Nhận lệnh /congtac từ chat ${chatId}`);
   const congTacData = await loadFromCache(CACHE_FILE.socialWork);
   if (!congTacData) {
-    console.log("📋 Cache trống, bắt đầu khởi tạo dữ liệu...");
-    bot.sendMessage(chatId, "📋 Đang tải dữ liệu, vui lòng đợi vài giây...");
+    bot.sendMessage(chatId, "📋 Đang tải dữ liệu...");
     try {
-      if (!browser || !page) {
-        console.log("🔄 Khởi tạo browser...");
-        await initializeBrowser();
-      }
-      console.log("🔄 Cập nhật dữ liệu...");
-      await Promise.race([
-        updateAllData(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout sau 30 giây")), 30000))
-      ]);
+      await updateAllData();
       const updatedCongTacData = await loadFromCache(CACHE_FILE.socialWork);
-      if (!updatedCongTacData) throw new Error("Không thể lấy dữ liệu!");
-      if (!updatedCongTacData.length) {
-        bot.sendMessage(chatId, "📋 Không có công tác xã hội nào.");
-        return;
-      }
-      const limited = updatedCongTacData.slice(0, 5);
       let message = "📋 *Công tác xã hội:*\n*------------------------------------*\n";
-      limited.forEach((c, i) => {
-        message += `📌 *${i + 1}. ${c.suKien}*\n📍 ${c.diaDiem}\n👥 ${c.soLuongDK}\n⭐ ${c.diem}\n🕛 ${c.batDau} - ${c.ketThuc}\n\n`;
+      updatedCongTacData.slice(0, 5).forEach((c, i) => {
+        const fromTime = new Date(c.FromTime).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" });
+        const toTime = new Date(c.ToTime).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" });
+        message += `📌 *${i + 1}. ${c.Details}*\n📍 ${c.Location || 'Chưa rõ'}\n👥 ${c.NumRegisted || 'Chưa rõ'} người đăng ký\n⭐ ${c.MarkConverted || '0'} điểm\n🕛 ${fromTime} - ${toTime}\n\n`;
       });
       if (updatedCongTacData.length > 5) message += `📢 Còn ${updatedCongTacData.length - 5} công tác khác.`;
-      console.log("✅ Gửi phản hồi thành công (nhanh hơn)");
       bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
     } catch (error) {
-      console.error("❌ Lỗi xử lý /congtac:", error.message);
       bot.sendMessage(chatId, `❌ Lỗi: ${error.message}`);
     }
     return;
   }
-  if (!congTacData.length) {
-    bot.sendMessage(chatId, "📋 Không có công tác xã hội nào.");
-    return;
-  }
-  const limited = congTacData.slice(0, 5);
   let message = "📋 *Công tác xã hội:*\n*------------------------------------*\n";
-  limited.forEach((c, i) => {
-    message += `📌 *${i + 1}. ${c.suKien}*\n📍 ${c.diaDiem}\n👥 ${c.soLuongDK}\n⭐ ${c.diem}\n🕛 ${c.batDau} - ${c.ketThuc}\n\n`;
+  congTacData.slice(0, 5).forEach((c, i) => {
+    const fromTime = new Date(c.FromTime).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" });
+    const toTime = new Date(c.ToTime).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" });
+    message += `📌 *${i + 1}. ${c.Details}*\n📍 ${c.Location || 'Chưa rõ'}\n👥 ${c.NumRegisted || 'Chưa rõ'} người đăng ký\n⭐ ${c.MarkConverted || '0'} điểm\n🕛 ${fromTime} - ${toTime}\n\n`;
   });
   if (congTacData.length > 5) message += `📢 Còn ${congTacData.length - 5} công tác khác.`;
-  console.log("✅ Gửi phản hồi từ cache (ngay lập tức)");
   bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
 });
 
