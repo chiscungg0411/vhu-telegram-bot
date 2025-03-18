@@ -7,7 +7,7 @@ WORKDIR /app
 # Cập nhật npm lên phiên bản mới nhất
 RUN npm install -g npm@11.2.0
 
-# Cài đặt các công cụ cần thiết cho Puppeteer (bao gồm Chrome)
+# Cài đặt các công cụ cần thiết cho Puppeteer (bao gồm các phụ thuộc của Chrome)
 RUN apt-get update && apt-get install -y \
     fonts-liberation \
     libasound2 \
@@ -36,16 +36,15 @@ RUN apt-get update && apt-get install -y \
     libxrender1 \
     xdg-utils \
     wget \
-    gnupg \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-# Thêm kho lưu trữ Chrome và cài đặt Google Chrome
-RUN wget --quiet -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor > /usr/share/keyrings/google-chrome.gpg \
-    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
+# Tải và cài đặt Google Chrome trực tiếp từ file .deb
+RUN wget --quiet -O /tmp/google-chrome-stable_current_amd64.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
     && apt-get update \
-    && apt-get install -y google-chrome-stable \
+    && apt-get install -y /tmp/google-chrome-stable_current_amd64.deb \
     --no-install-recommends \
+    && rm /tmp/google-chrome-stable_current_amd64.deb \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy package.json và cài đặt dependencies
