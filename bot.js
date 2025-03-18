@@ -43,13 +43,24 @@ const bot = new TelegramBot(TOKEN);
 // Khởi tạo trình duyệt toàn cục
 let browser;
 async function initializeBrowser() {
-    browser = await puppeteer.launch({
-        headless: 'new',
-        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-        executablePath: '/usr/bin/google-chrome-stable', // Chỉ định đường dẫn Chrome binary
-        timeout: 10000,
-    });
-    console.log("✅ Trình duyệt Puppeteer đã được khởi tạo.");
+    try {
+        browser = await puppeteer.launch({
+            headless: 'new',
+            args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+            executablePath: '/usr/bin/google-chrome-stable',
+            timeout: 10000,
+        });
+        console.log("✅ Trình duyệt Puppeteer đã được khởi tạo.");
+    } catch (error) {
+        console.error("❌ Lỗi khởi tạo Puppeteer với đường dẫn mặc định:", error.message);
+        console.log("🔄 Thử tìm Chrome tự động...");
+        browser = await puppeteer.launch({
+            headless: 'new',
+            args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+            timeout: 10000,
+        });
+        console.log("✅ Trình duyệt Puppeteer đã được khởi tạo với phát hiện tự động.");
+    }
 }
 
 // Đóng trình duyệt khi bot dừng
@@ -61,7 +72,7 @@ process.on('SIGINT', async () => {
     process.exit();
 });
 
-const PORT = process.env.PORT || 10000; // Sử dụng cổng 10000 theo log
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, async () => {
     console.log(`Server running on port ${PORT}`);
     const webhookUrl = `https://vhu-telegram-bot.onrender.com/bot${TOKEN}`;
