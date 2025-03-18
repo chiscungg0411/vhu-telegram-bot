@@ -1,7 +1,7 @@
 require("dotenv").config();
 const TelegramBot = require("node-telegram-bot-api");
 const express = require("express");
-const puppeteer = require("puppeteer-core"); // Sử dụng puppeteer-core
+const puppeteer = require("puppeteer-core");
 const fs = require("fs").promises;
 
 // Khởi tạo Express và Bot
@@ -51,6 +51,7 @@ async function saveToCache(file, data) {
 async function ensureCacheDir() {
   try {
     await fs.mkdir("./cache", { recursive: true });
+    console.log("✅ Thư mục cache đã được tạo.");
   } catch (error) {
     console.error("❌ Lỗi tạo thư mục cache:", error.message);
   }
@@ -70,28 +71,20 @@ async function initializeBrowser(maxRetries = 3) {
           "--disable-setuid-sandbox",
           "--disable-dev-shm-usage",
           "--disable-gpu",
-          "--single-process",
         ],
         executablePath: process.env.CHROME_PATH || "/usr/bin/google-chrome-stable",
-        timeout: 30000,
+        timeout: 60000, // Tăng timeout lên 60 giây
       });
       page = await browser.newPage();
       await page.setViewport({ width: 1280, height: 720 });
-      await page.setRequestInterception(true);
-      page.on("request", (req) => {
-        const resourceType = req.resourceType();
-        if (["image", "stylesheet", "font", "media"].includes(resourceType)) req.abort();
-        else req.continue();
-      });
-      await loginToPortal(page);
-      console.log("✅ Trình duyệt và trang đã sẵn sàng!");
+      console.log("✅ Trình duyệt đã khởi tạo thành công.");
       return;
     } catch (error) {
       console.error(`❌ Lỗi khởi tạo trình duyệt (lần ${attempt}):`, error.message);
       if (browser) await browser.close();
       browser = null;
       if (attempt === maxRetries) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 5000));
+      await new Promise((resolve) => setTimeout(resolve, 5000)); // Chờ 5 giây trước khi thử lại
     }
   }
 }
@@ -288,6 +281,7 @@ ensureCacheDir().then(() => {
       bot.startPolling({ polling: true });
     }
     // Không khởi tạo dữ liệu ngay, để lệnh đầu tiên kích hoạt
+    console.log("✅ Bot đã sẵn sàng, chờ lệnh...");
   });
 });
 
