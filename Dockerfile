@@ -4,6 +4,9 @@ FROM node:20-slim
 # Thiết lập thư mục làm việc
 WORKDIR /app
 
+# Cập nhật npm lên phiên bản mới nhất
+RUN npm install -g npm@11.2.0
+
 # Cài đặt các công cụ cần thiết cho Puppeteer
 RUN apt-get update && apt-get install -y \
     fonts-liberation \
