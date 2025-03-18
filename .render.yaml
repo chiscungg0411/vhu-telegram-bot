@@ -4,11 +4,16 @@ services:
     env: node
     plan: free
     buildCommand: npm install
-    startCommand: node bot.js
+    startCommand: npm start
     envVars:
       - key: TELEGRAM_BOT_TOKEN
-        sync: false
+        fromDatabase:
+          name: telegram-bot-token
       - key: VHU_EMAIL
-        sync: false
+        fromDatabase:
+          name: vhu-email
       - key: VHU_PASSWORD
-        sync: false
+        fromDatabase:
+          name: vhu-password
+    healthCheckPath: /ping
+    autoDeploy: true
