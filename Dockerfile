@@ -36,12 +36,13 @@ RUN apt-get update && apt-get install -y \
     libxrender1 \
     xdg-utils \
     wget \
+    gnupg \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-# Cài đặt Chrome binary cho Puppeteer
-RUN wget --quiet -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
-    && echo "deb http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list \
+# Thêm kho lưu trữ Chrome và cài đặt Google Chrome
+RUN wget --quiet -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor > /usr/share/keyrings/google-chrome.gpg \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
     && apt-get update \
     && apt-get install -y google-chrome-stable \
     --no-install-recommends \
