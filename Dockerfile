@@ -42,13 +42,16 @@ RUN apt-get update && apt-get install -y \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-# Tải và cài đặt Google Chrome trực tiếp từ file .deb
-RUN wget --quiet -O /tmp/google-chrome-stable_current_amd64.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
-    && if [ ! -f /tmp/google-chrome-stable_current_amd64.deb ]; then echo "Error: Failed to download Google Chrome .deb file" && exit 1; fi \
+# Thêm kho lưu trữ Chrome và cài đặt Google Chrome
+RUN wget --quiet -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
     && apt-get update \
-    && dpkg -i /tmp/google-chrome-stable_current_amd64.deb || apt-get install -f -y \
-    && rm /tmp/google-chrome-stable_current_amd64.deb \
+    && apt-get install -y google-chrome-stable \
+    --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
+
+# Xác minh Chrome được cài đặt
+RUN if [ ! -f /usr/bin/google-chrome-stable ]; then echo "Error: Google Chrome not found at /usr/bin/google-chrome-stable" && exit 1; fi
 
 # Copy package.json và cài đặt dependencies
 COPY package.json .
