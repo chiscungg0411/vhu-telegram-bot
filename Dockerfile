@@ -7,7 +7,7 @@ WORKDIR /app
 # Cập nhật npm lên phiên bản mới nhất
 RUN npm install -g npm@11.2.0
 
-# Cài đặt các công cụ cần thiết cho Puppeteer
+# Cài đặt các công cụ cần thiết cho Puppeteer (bao gồm Chrome)
 RUN apt-get update && apt-get install -y \
     fonts-liberation \
     libasound2 \
@@ -39,6 +39,14 @@ RUN apt-get update && apt-get install -y \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
+# Cài đặt Chrome binary cho Puppeteer
+RUN wget --quiet -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && echo "deb http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list \
+    && apt-get update \
+    && apt-get install -y google-chrome-stable \
+    --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy package.json và cài đặt dependencies
 COPY package.json .
 RUN npm install
@@ -47,7 +55,7 @@ RUN npm install
 COPY . .
 
 # Mở cổng cho ứng dụng
-EXPOSE 3000
+EXPOSE 10000
 
 # Chạy ứng dụng
 CMD ["npm", "start"]
