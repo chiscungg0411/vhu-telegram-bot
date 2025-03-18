@@ -17,3 +17,4 @@ services:
           name: vhu-password
     healthCheckPath: /ping
     autoDeploy: true
+    port: 10000 # Thêm dòng này để khai báo rõ port
