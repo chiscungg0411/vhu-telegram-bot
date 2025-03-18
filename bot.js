@@ -46,7 +46,7 @@ async function initializeBrowser() {
     browser = await puppeteer.launch({
         headless: 'new',
         args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-        timeout: 10000, // Giảm timeout khởi tạo trình duyệt
+        timeout: 10000,
     });
     console.log("✅ Trình duyệt Puppeteer đã được khởi tạo.");
 }
@@ -113,7 +113,7 @@ async function loginToPortal(page) {
     console.log("✅ Đăng nhập thành công, thời gian:", Date.now() - startTime, "ms");
 }
 
-// Hàm lấy lịch học với tối ưu hóa
+// Hàm lấy lịch học với tối ưu hóa (đã tách thành module riêng)
 async function getSchedule(page, weekOffset = 0) {
     const startTime = Date.now();
     console.log("📅 Bắt đầu lấy lịch học...", startTime);
@@ -247,7 +247,7 @@ bot.onText(/\/tuansau/, async (msg) => {
         await page.setViewport({ width: 1280, height: 720 });
 
         await loginToPortal(page);
-        const lichHoc = await getSchedule(page, 1); // Sử dụng weekOffset để phân biệt tuần sau
+        const lichHoc = await getSchedule(page, 1);
 
         if (Object.keys(lichHoc).length === 0) {
             bot.sendMessage(chatId, "❌ Không tìm thấy lịch học tuần sau.");
