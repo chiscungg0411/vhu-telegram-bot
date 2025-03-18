@@ -25,45 +25,64 @@ async function loadFromCache(file) {
     if (Date.now() - parsed.timestamp < CACHE_DURATION) return parsed.data;
     return null;
   } catch (error) {
+    console.error(`❌ Lỗi đọc cache từ ${file}:`, error.message);
     return null;
   }
 }
 
 async function saveToCache(file, data) {
-  await fs.writeFile(file, JSON.stringify({ timestamp: Date.now(), data }), "utf8");
+  try {
+    await fs.writeFile(file, JSON.stringify({ timestamp: Date.now(), data }), "utf8");
+  } catch (error) {
+    console.error(`❌ Lỗi lưu cache vào ${file}:`, error.message);
+  }
 }
 
-async function initializeBrowser() {
-  if (browser) return;
-  console.log("🔄 Khởi tạo trình duyệt Puppeteer...");
+async function ensureCacheDir() {
   try {
-    browser = await puppeteer.launch({
-      headless: "new",
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--single-process",
-      ],
-      executablePath: process.env.CHROME_PATH || "/usr/bin/google-chrome-stable",
-      timeout: 30000,
-    });
-    page = await browser.newPage();
-    await page.setViewport({ width: 1280, height: 720 });
-    await page.setRequestInterception(true);
-    page.on("request", (req) => {
-      const resourceType = req.resourceType();
-      if (["image", "stylesheet", "font", "script", "media"].includes(resourceType)) req.abort();
-      else req.continue();
-    });
-    await loginToPortal(page);
-    console.log("✅ Trình duyệt và trang đã sẵn sàng!");
+    await fs.mkdir("./cache", { recursive: true });
   } catch (error) {
-    console.error("❌ Lỗi khởi tạo trình duyệt:", error.message);
-    if (browser) await browser.close();
-    browser = null;
-    throw error;
+    console.error("❌ Lỗi tạo thư mục cache:", error.message);
+  }
+}
+
+async function initializeBrowser(maxRetries = 3) {
+  if (browser) return;
+  let attempt = 0;
+  while (attempt < maxRetries) {
+    attempt++;
+    console.log(`🔄 Khởi tạo trình duyệt Puppeteer (lần ${attempt})...`);
+    try {
+      browser = await puppeteer.launch({
+        headless: "new",
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-gpu",
+          "--single-process",
+        ],
+        executablePath: process.env.CHROME_PATH || "/usr/bin/google-chrome-stable",
+        timeout: 30000,
+      });
+      page = await browser.newPage();
+      await page.setViewport({ width: 1280, height: 720 });
+      await page.setRequestInterception(true);
+      page.on("request", (req) => {
+        const resourceType = req.resourceType();
+        if (["image", "stylesheet", "font", "script", "media"].includes(resourceType)) req.abort();
+        else req.continue();
+      });
+      await loginToPortal(page);
+      console.log("✅ Trình duyệt và trang đã sẵn sàng!");
+      return;
+    } catch (error) {
+      console.error(`❌ Lỗi khởi tạo trình duyệt (lần ${attempt}):`, error.message);
+      if (browser) await browser.close();
+      browser = null;
+      if (attempt === maxRetries) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+    }
   }
 }
 
@@ -241,24 +260,28 @@ app.post(`/bot${TOKEN}`, (req, res) => {
 });
 app.get("/ping", (req, res) => res.send("Bot is alive!"));
 
-app.listen(PORT, async () => {
-  console.log(`Server chạy trên port ${PORT}`);
-  process.env.PORT = PORT;
-  const webhookUrl = `https://vhu-telegram-bot.onrender.com/bot${TOKEN}`;
-  try {
-    await bot.setWebHook(webhookUrl);
-    console.log(`✅ Webhook đã đặt: ${webhookUrl}`);
-  } catch (error) {
-    console.error("❌ Lỗi thiết lập webhook:", error.message);
-    console.log("🔄 Chuyển sang polling...");
-    bot.startPolling({ polling: true });
-  }
-  setInterval(updateAllData, 60 * 60 * 1000);
+ensureCacheDir().then(() => {
+  app.listen(PORT, async () => {
+    console.log(`Server chạy trên port ${PORT}`);
+    process.env.PORT = PORT;
+    const webhookUrl = `https://vhu-telegram-bot.onrender.com/bot${TOKEN}`;
+    try {
+      await bot.setWebHook(webhookUrl);
+      console.log(`✅ Webhook đã đặt: ${webhookUrl}`);
+    } catch (error) {
+      console.error("❌ Lỗi thiết lập webhook:", error.message);
+      console.log("🔄 Chuyển sang polling...");
+      bot.startPolling({ polling: true });
+    }
+    setInterval(updateAllData, 60 * 60 * 1000);
+  });
 });
 
 bot.onText(/\/start/, (msg) => {
+  const chatId = msg.chat.id;
+  console.log(`📩 Nhận lệnh /start từ chat ${chatId}`);
   bot.sendMessage(
-    msg.chat.id,
+    chatId,
     "👋 Xin chào! Mình là Trợ lý VHU.\n" +
       "📅 /tuannay - Lịch học tuần này\n" +
       "📅 /tuansau - Lịch học tuần sau\n" +
@@ -269,12 +292,18 @@ bot.onText(/\/start/, (msg) => {
 
 bot.onText(/\/tuannay/, async (msg) => {
   const chatId = msg.chat.id;
+  console.log(`📩 Nhận lệnh /tuannay từ chat ${chatId}`);
   const cached = await loadFromCache(CACHE_FILE.schedules);
   const lichHoc = cached?.week0;
   if (!lichHoc) {
+    console.log("📅 Cache trống, bắt đầu khởi tạo dữ liệu...");
     bot.sendMessage(chatId, "📅 Đang khởi tạo dữ liệu, vui lòng đợi...");
     try {
-      if (!browser || !page) await initializeBrowser();
+      if (!browser || !page) {
+        console.log("🔄 Khởi tạo browser...");
+        await initializeBrowser();
+      }
+      console.log("🔄 Cập nhật dữ liệu...");
       await updateAllData();
       const updatedCache = await loadFromCache(CACHE_FILE.schedules);
       const updatedLichHoc = updatedCache?.week0;
@@ -283,8 +312,10 @@ bot.onText(/\/tuannay/, async (msg) => {
       for (const [ngay, monHocs] of Object.entries(updatedLichHoc)) {
         message += `📌 *${ngay}:*\n${monHocs.length ? monHocs.map((m) => `📖 ${m}`).join("\n") : "❌ Không có lịch"}\n\n`;
       }
+      console.log("✅ Gửi phản hồi thành công");
       bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
     } catch (error) {
+      console.error("❌ Lỗi xử lý /tuannay:", error.message);
       bot.sendMessage(chatId, `❌ Lỗi: ${error.message}`);
     }
     return;
@@ -293,17 +324,24 @@ bot.onText(/\/tuannay/, async (msg) => {
   for (const [ngay, monHocs] of Object.entries(lichHoc)) {
     message += `📌 *${ngay}:*\n${monHocs.length ? monHocs.map((m) => `📖 ${m}`).join("\n") : "❌ Không có lịch"}\n\n`;
   }
+  console.log("✅ Gửi phản hồi từ cache");
   bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
 });
 
 bot.onText(/\/tuansau/, async (msg) => {
   const chatId = msg.chat.id;
+  console.log(`📩 Nhận lệnh /tuansau từ chat ${chatId}`);
   const cached = await loadFromCache(CACHE_FILE.schedules);
   const lichHoc = cached?.week1;
   if (!lichHoc) {
+    console.log("📅 Cache trống, bắt đầu khởi tạo dữ liệu...");
     bot.sendMessage(chatId, "📅 Đang khởi tạo dữ liệu, vui lòng đợi...");
     try {
-      if (!browser || !page) await initializeBrowser();
+      if (!browser || !page) {
+        console.log("🔄 Khởi tạo browser...");
+        await initializeBrowser();
+      }
+      console.log("🔄 Cập nhật dữ liệu...");
       await updateAllData();
       const updatedCache = await loadFromCache(CACHE_FILE.schedules);
       const updatedLichHoc = updatedCache?.week1;
@@ -312,8 +350,10 @@ bot.onText(/\/tuansau/, async (msg) => {
       for (const [ngay, monHocs] of Object.entries(updatedLichHoc)) {
         message += `📌 *${ngay}:*\n${monHocs.length ? monHocs.map((m) => `📖 ${m}`).join("\n") : "❌ Không có lịch"}\n\n`;
       }
+      console.log("✅ Gửi phản hồi thành công");
       bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
     } catch (error) {
+      console.error("❌ Lỗi xử lý /tuansau:", error.message);
       bot.sendMessage(chatId, `❌ Lỗi: ${error.message}`);
     }
     return;
@@ -322,16 +362,23 @@ bot.onText(/\/tuansau/, async (msg) => {
   for (const [ngay, monHocs] of Object.entries(lichHoc)) {
     message += `📌 *${ngay}:*\n${monHocs.length ? monHocs.map((m) => `📖 ${m}`).join("\n") : "❌ Không có lịch"}\n\n`;
   }
+  console.log("✅ Gửi phản hồi từ cache");
   bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
 });
 
 bot.onText(/\/thongbao/, async (msg) => {
   const chatId = msg.chat.id;
+  console.log(`📩 Nhận lệnh /thongbao từ chat ${chatId}`);
   const notifications = await loadFromCache(CACHE_FILE.notifications);
   if (!notifications) {
+    console.log("🔔 Cache trống, bắt đầu khởi tạo dữ liệu...");
     bot.sendMessage(chatId, "🔔 Đang khởi tạo dữ liệu, vui lòng đợi...");
     try {
-      if (!browser || !page) await initializeBrowser();
+      if (!browser || !page) {
+        console.log("🔄 Khởi tạo browser...");
+        await initializeBrowser();
+      }
+      console.log("🔄 Cập nhật dữ liệu...");
       await updateAllData();
       const updatedNotifications = await loadFromCache(CACHE_FILE.notifications);
       if (!updatedNotifications) throw new Error("Không thể lấy dữ liệu!");
@@ -345,8 +392,10 @@ bot.onText(/\/thongbao/, async (msg) => {
         message += `📢 *${i + 1}. ${n.title}*\n📩 ${n.sender}\n⏰ ${n.date}\n\n`;
       });
       if (updatedNotifications.length > 5) message += `📢 Còn ${updatedNotifications.length - 5} thông báo khác.`;
+      console.log("✅ Gửi phản hồi thành công");
       bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
     } catch (error) {
+      console.error("❌ Lỗi xử lý /thongbao:", error.message);
       bot.sendMessage(chatId, `❌ Lỗi: ${error.message}`);
     }
     return;
@@ -361,16 +410,23 @@ bot.onText(/\/thongbao/, async (msg) => {
     message += `📢 *${i + 1}. ${n.title}*\n📩 ${n.sender}\n⏰ ${n.date}\n\n`;
   });
   if (notifications.length > 5) message += `📢 Còn ${notifications.length - 5} thông báo khác.`;
+  console.log("✅ Gửi phản hồi từ cache");
   bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
 });
 
 bot.onText(/\/congtac/, async (msg) => {
   const chatId = msg.chat.id;
+  console.log(`📩 Nhận lệnh /congtac từ chat ${chatId}`);
   const congTacData = await loadFromCache(CACHE_FILE.socialWork);
   if (!congTacData) {
+    console.log("📋 Cache trống, bắt đầu khởi tạo dữ liệu...");
     bot.sendMessage(chatId, "📋 Đang khởi tạo dữ liệu, vui lòng đợi...");
     try {
-      if (!browser || !page) await initializeBrowser();
+      if (!browser || !page) {
+        console.log("🔄 Khởi tạo browser...");
+        await initializeBrowser();
+      }
+      console.log("🔄 Cập nhật dữ liệu...");
       await updateAllData();
       const updatedCongTacData = await loadFromCache(CACHE_FILE.socialWork);
       if (!updatedCongTacData) throw new Error("Không thể lấy dữ liệu!");
@@ -384,8 +440,10 @@ bot.onText(/\/congtac/, async (msg) => {
         message += `📌 *${i + 1}. ${c.suKien}*\n📍 ${c.diaDiem}\n👥 ${c.soLuongDK}\n⭐ ${c.diem}\n🕛 ${c.batDau} - ${c.ketThuc}\n\n`;
       });
       if (updatedCongTacData.length > 5) message += `📢 Còn ${updatedCongTacData.length - 5} công tác khác.`;
+      console.log("✅ Gửi phản hồi thành công");
       bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
     } catch (error) {
+      console.error("❌ Lỗi xử lý /congtac:", error.message);
       bot.sendMessage(chatId, `❌ Lỗi: ${error.message}`);
     }
     return;
@@ -400,6 +458,7 @@ bot.onText(/\/congtac/, async (msg) => {
     message += `📌 *${i + 1}. ${c.suKien}*\n📍 ${c.diaDiem}\n👥 ${c.soLuongDK}\n⭐ ${c.diem}\n🕛 ${c.batDau} - ${c.ketThuc}\n\n`;
   });
   if (congTacData.length > 5) message += `📢 Còn ${congTacData.length - 5} công tác khác.`;
+  console.log("✅ Gửi phản hồi từ cache");
   bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
 });
 
