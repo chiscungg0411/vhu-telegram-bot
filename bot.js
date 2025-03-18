@@ -4,13 +4,11 @@ const express = require("express");
 const puppeteer = require("puppeteer");
 const fs = require("fs").promises;
 
-// Khởi tạo Express và Bot
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const app = express();
 app.use(express.json());
 const bot = new TelegramBot(TOKEN);
 
-// Khởi tạo trình duyệt toàn cục và file cache
 let browser;
 let page;
 const CACHE_FILE = {
@@ -18,9 +16,8 @@ const CACHE_FILE = {
   notifications: "./cache_notifications.json",
   socialWork: "./cache_socialWork.json",
 };
-const CACHE_DURATION = 2 * 60 * 60 * 1000; // 2 giờ
+const CACHE_DURATION = 2 * 60 * 60 * 1000;
 
-// Hàm cache
 async function loadFromCache(file) {
   try {
     const data = await fs.readFile(file, "utf8");
@@ -36,16 +33,21 @@ async function saveToCache(file, data) {
   await fs.writeFile(file, JSON.stringify({ timestamp: Date.now(), data }), "utf8");
 }
 
-// Khởi tạo trình duyệt
 async function initializeBrowser() {
   if (browser) return;
   console.log("🔄 Khởi tạo trình duyệt Puppeteer...");
   try {
     browser = await puppeteer.launch({
       headless: "new",
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-      executablePath: "/usr/bin/google-chrome-stable",
-      timeout: 15000,
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--single-process",
+      ],
+      executablePath: process.env.CHROME_PATH || "/usr/bin/google-chrome-stable",
+      timeout: 30000,
     });
     page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 720 });
@@ -65,7 +67,6 @@ async function initializeBrowser() {
   }
 }
 
-// Đóng trình duyệt khi dừng bot
 process.on("SIGINT", async () => {
   if (browser) {
     await browser.close();
@@ -74,40 +75,16 @@ process.on("SIGINT", async () => {
   process.exit();
 });
 
-// Thiết lập server và webhook
-const PORT = process.env.PORT || 10000;
-app.post(`/bot${TOKEN}`, (req, res) => {
-  bot.processUpdate(req.body);
-  res.sendStatus(200);
-});
-app.get("/ping", (req, res) => res.send("Bot is alive!"));
-
-app.listen(PORT, async () => {
-  console.log(`Server chạy trên port ${PORT}`);
-  const webhookUrl = `https://vhu-telegram-bot.onrender.com/bot${TOKEN}`;
-  try {
-    await bot.setWebHook(webhookUrl);
-    console.log(`✅ Webhook đã đặt: ${webhookUrl}`);
-    await initializeBrowser();
-    await updateAllData(); // Cập nhật dữ liệu lần đầu
-  } catch (error) {
-    console.error("❌ Lỗi thiết lập webhook:", error.message);
-    console.log("🔄 Chuyển sang polling...");
-    bot.startPolling({ polling: true });
-  }
-  setInterval(updateAllData, 60 * 60 * 1000); // Cập nhật mỗi giờ
-});
-
-// Đăng nhập vào portal
 async function loginToPortal(page) {
   try {
-    await page.goto("https://portal.vhu.edu.vn/login", { timeout: 5000, waitUntil: "networkidle0" });
-    await page.waitForSelector("input[name='email']", { timeout: 3000 });
+    await page.goto("https://portal.vhu.edu.vn/login", { timeout: 10000, waitUntil: "networkidle0" });
+    console.log("✅ Trang đăng nhập đã tải, kiểm tra selector...");
+    await page.waitForSelector("input[name='email']", { timeout: 10000 });
     await page.type("input[name='email']", process.env.VHU_EMAIL);
     await page.type("input[name='password']", process.env.VHU_PASSWORD);
     await Promise.all([
       page.click("button[type='submit']"),
-      page.waitForNavigation({ timeout: 10000 }),
+      page.waitForNavigation({ timeout: 15000 }),
     ]);
 
     if (page.url().includes("login")) throw new Error("Sai tài khoản hoặc mật khẩu!");
@@ -118,7 +95,6 @@ async function loginToPortal(page) {
   }
 }
 
-// Lấy lịch học
 async function getSchedule(weekOffset = 0) {
   try {
     await page.goto("https://portal.vhu.edu.vn/student/schedules", {
@@ -170,7 +146,6 @@ async function getSchedule(weekOffset = 0) {
   }
 }
 
-// Lấy thông báo
 async function getNotifications() {
   try {
     await page.goto("https://portal.vhu.edu.vn/student/index", {
@@ -200,7 +175,6 @@ async function getNotifications() {
   }
 }
 
-// Lấy công tác xã hội
 async function getSocialWork() {
   try {
     await page.goto("https://portal.vhu.edu.vn/student/congtacxahoi", {
@@ -245,23 +219,43 @@ async function getSocialWork() {
   }
 }
 
-// Cập nhật toàn bộ dữ liệu định kỳ
 async function updateAllData() {
   try {
     if (!browser || !page) await initializeBrowser();
-    await getSchedule(0); // Tuần này
-    await getSchedule(1); // Tuần sau
+    await getSchedule(0);
+    await getSchedule(1);
     await getNotifications();
     await getSocialWork();
     console.log("✅ Đã cập nhật toàn bộ dữ liệu vào cache");
   } catch (error) {
     console.error("❌ Lỗi cập nhật dữ liệu:", error.message);
     if (browser) await browser.close();
-    browser = null; // Đặt lại để khởi tạo lại lần sau
+    browser = null;
   }
 }
 
-// Xử lý lệnh
+const PORT = process.env.PORT || 10000;
+app.post(`/bot${TOKEN}`, (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
+});
+app.get("/ping", (req, res) => res.send("Bot is alive!"));
+
+app.listen(PORT, async () => {
+  console.log(`Server chạy trên port ${PORT}`);
+  process.env.PORT = PORT;
+  const webhookUrl = `https://vhu-telegram-bot.onrender.com/bot${TOKEN}`;
+  try {
+    await bot.setWebHook(webhookUrl);
+    console.log(`✅ Webhook đã đặt: ${webhookUrl}`);
+  } catch (error) {
+    console.error("❌ Lỗi thiết lập webhook:", error.message);
+    console.log("🔄 Chuyển sang polling...");
+    bot.startPolling({ polling: true });
+  }
+  setInterval(updateAllData, 60 * 60 * 1000);
+});
+
 bot.onText(/\/start/, (msg) => {
   bot.sendMessage(
     msg.chat.id,
@@ -278,7 +272,21 @@ bot.onText(/\/tuannay/, async (msg) => {
   const cached = await loadFromCache(CACHE_FILE.schedules);
   const lichHoc = cached?.week0;
   if (!lichHoc) {
-    bot.sendMessage(chatId, "📅 Dữ liệu đang được cập nhật, vui lòng thử lại sau vài giây!");
+    bot.sendMessage(chatId, "📅 Đang khởi tạo dữ liệu, vui lòng đợi...");
+    try {
+      if (!browser || !page) await initializeBrowser();
+      await updateAllData();
+      const updatedCache = await loadFromCache(CACHE_FILE.schedules);
+      const updatedLichHoc = updatedCache?.week0;
+      if (!updatedLichHoc) throw new Error("Không thể lấy dữ liệu!");
+      let message = "📅 *Lịch học tuần này:*\n*------------------------------------*\n";
+      for (const [ngay, monHocs] of Object.entries(updatedLichHoc)) {
+        message += `📌 *${ngay}:*\n${monHocs.length ? monHocs.map((m) => `📖 ${m}`).join("\n") : "❌ Không có lịch"}\n\n`;
+      }
+      bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+    } catch (error) {
+      bot.sendMessage(chatId, `❌ Lỗi: ${error.message}`);
+    }
     return;
   }
   let message = "📅 *Lịch học tuần này:*\n*------------------------------------*\n";
@@ -293,7 +301,21 @@ bot.onText(/\/tuansau/, async (msg) => {
   const cached = await loadFromCache(CACHE_FILE.schedules);
   const lichHoc = cached?.week1;
   if (!lichHoc) {
-    bot.sendMessage(chatId, "📅 Dữ liệu đang được cập nhật, vui lòng thử lại sau vài giây!");
+    bot.sendMessage(chatId, "📅 Đang khởi tạo dữ liệu, vui lòng đợi...");
+    try {
+      if (!browser || !page) await initializeBrowser();
+      await updateAllData();
+      const updatedCache = await loadFromCache(CACHE_FILE.schedules);
+      const updatedLichHoc = updatedCache?.week1;
+      if (!updatedLichHoc) throw new Error("Không thể lấy dữ liệu!");
+      let message = "📅 *Lịch học tuần sau:*\n*------------------------------------*\n";
+      for (const [ngay, monHocs] of Object.entries(updatedLichHoc)) {
+        message += `📌 *${ngay}:*\n${monHocs.length ? monHocs.map((m) => `📖 ${m}`).join("\n") : "❌ Không có lịch"}\n\n`;
+      }
+      bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+    } catch (error) {
+      bot.sendMessage(chatId, `❌ Lỗi: ${error.message}`);
+    }
     return;
   }
   let message = "📅 *Lịch học tuần sau:*\n*------------------------------------*\n";
@@ -307,7 +329,26 @@ bot.onText(/\/thongbao/, async (msg) => {
   const chatId = msg.chat.id;
   const notifications = await loadFromCache(CACHE_FILE.notifications);
   if (!notifications) {
-    bot.sendMessage(chatId, "🔔 Dữ liệu đang được cập nhật, vui lòng thử lại sau vài giây!");
+    bot.sendMessage(chatId, "🔔 Đang khởi tạo dữ liệu, vui lòng đợi...");
+    try {
+      if (!browser || !page) await initializeBrowser();
+      await updateAllData();
+      const updatedNotifications = await loadFromCache(CACHE_FILE.notifications);
+      if (!updatedNotifications) throw new Error("Không thể lấy dữ liệu!");
+      if (!updatedNotifications.length) {
+        bot.sendMessage(chatId, "🔔 Không có thông báo nào.");
+        return;
+      }
+      const limited = updatedNotifications.slice(0, 5);
+      let message = "🔔 *Thông báo mới nhất:*\n*------------------------------------*\n";
+      limited.forEach((n, i) => {
+        message += `📢 *${i + 1}. ${n.title}*\n📩 ${n.sender}\n⏰ ${n.date}\n\n`;
+      });
+      if (updatedNotifications.length > 5) message += `📢 Còn ${updatedNotifications.length - 5} thông báo khác.`;
+      bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+    } catch (error) {
+      bot.sendMessage(chatId, `❌ Lỗi: ${error.message}`);
+    }
     return;
   }
   if (!notifications.length) {
@@ -327,7 +368,26 @@ bot.onText(/\/congtac/, async (msg) => {
   const chatId = msg.chat.id;
   const congTacData = await loadFromCache(CACHE_FILE.socialWork);
   if (!congTacData) {
-    bot.sendMessage(chatId, "📋 Dữ liệu đang được cập nhật, vui lòng thử lại sau vài giây!");
+    bot.sendMessage(chatId, "📋 Đang khởi tạo dữ liệu, vui lòng đợi...");
+    try {
+      if (!browser || !page) await initializeBrowser();
+      await updateAllData();
+      const updatedCongTacData = await loadFromCache(CACHE_FILE.socialWork);
+      if (!updatedCongTacData) throw new Error("Không thể lấy dữ liệu!");
+      if (!updatedCongTacData.length) {
+        bot.sendMessage(chatId, "📋 Không có công tác xã hội nào.");
+        return;
+      }
+      const limited = updatedCongTacData.slice(0, 5);
+      let message = "📋 *Công tác xã hội:*\n*------------------------------------*\n";
+      limited.forEach((c, i) => {
+        message += `📌 *${i + 1}. ${c.suKien}*\n📍 ${c.diaDiem}\n👥 ${c.soLuongDK}\n⭐ ${c.diem}\n🕛 ${c.batDau} - ${c.ketThuc}\n\n`;
+      });
+      if (updatedCongTacData.length > 5) message += `📢 Còn ${updatedCongTacData.length - 5} công tác khác.`;
+      bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+    } catch (error) {
+      bot.sendMessage(chatId, `❌ Lỗi: ${error.message}`);
+    }
     return;
   }
   if (!congTacData.length) {
