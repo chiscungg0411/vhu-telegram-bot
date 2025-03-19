@@ -60,7 +60,7 @@ async function login(page, username, password, retries = 5) {
       });
       console.log("✅ Trang đăng nhập đã tải.");
 
-      await page.waitForSelector("input[name='email']", { timeout: 30000 });
+      await page.waitForSelector("input[name='email']", { timeout: 60000 });
       await page.type("input[name='email']", username, { delay: 50 });
       await page.type("input[name='password']", password, { delay: 50 });
       console.log("✍️ Đã nhập thông tin đăng nhập.");
@@ -69,23 +69,11 @@ async function login(page, username, password, retries = 5) {
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
       );
 
-      await page.waitForSelector("button[type='submit']", { timeout: 30000 });
+      await page.waitForSelector("button[type='submit']", { timeout: 60000 });
       await page.click("button[type='submit']");
       console.log("⏳ Đang chờ phản hồi sau đăng nhập...");
 
-      let timeout = 30000;
-      let elapsed = 0;
-      const interval = 1000;
-      while (elapsed < timeout) {
-        const currentUrl = page.url();
-        if (!currentUrl.includes("/login")) {
-          console.log(`✅ Đã chuyển hướng đến: ${currentUrl}`);
-          break;
-        }
-        await new Promise((resolve) => setTimeout(resolve, interval));
-        elapsed += interval;
-      }
-
+      await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 60000 });
       const finalUrl = page.url();
       if (finalUrl.includes("/login")) {
         const errorMessage = await page.evaluate(() =>
@@ -93,11 +81,10 @@ async function login(page, username, password, retries = 5) {
             ? "Sai tên đăng nhập hoặc mật khẩu."
             : "Đăng nhập thất bại (có thể do CAPTCHA hoặc lỗi server)."
         );
-        console.log(`📄 Lỗi cụ thể: ${errorMessage}`);
         throw new Error(`Đăng nhập thất bại: ${errorMessage}`);
       }
 
-      console.log("✅ Đăng nhập thành công.");
+      console.log("✅ Đăng nhập thành công:", finalUrl);
       return true;
     } catch (error) {
       console.error(`❌ Lỗi đăng nhập lần ${attempt}:`, error.message);
@@ -129,14 +116,22 @@ async function getSchedule(weekOffset = 0) {
       timeout: 60000,
     });
 
-    // Chọn tuần nếu cần (tuần hiện tại hoặc tuần sau)
-    const weekSelector = ".MuiTabs-root .MuiTab-root";
-    await page.waitForSelector(weekSelector, { timeout: 30000 });
-    const weekTabs = await page.$$(weekSelector);
-    const targetWeekIndex = weekOffset === 0 ? 0 : 1; // 0: tuần này, 1: tuần sau
-    if (weekTabs[targetWeekIndex]) {
-      await weekTabs[targetWeekIndex].click();
-      await new Promise((resolve) => setTimeout(resolve, 2000)); // Chờ load dữ liệu
+    // Chờ tab "TKB TUẦN" và chọn tuần
+    await page.waitForSelector(".MuiTab-root", { timeout: 60000 });
+    const tabs = await page.$$(".MuiTab-root");
+    if (tabs.length > 0) {
+      await tabs[0].click(); // Chọn tab "TKB TUẦN" (index 0)
+      await new Promise((resolve) => setTimeout(resolve, 3000)); // Chờ dữ liệu tải
+    }
+
+    // Chọn tuần (tuần hiện tại hoặc tuần sau)
+    const weekButtons = await page.$$(".MuiButton-containedPrimary");
+    if (weekOffset === 1 && weekButtons[2]) {
+      await weekButtons[2].click(); // Nút "SkipNext" để sang tuần sau
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    } else if (weekButtons[1]) {
+      await weekButtons[1].click(); // Nút "Hiện tại" để đảm bảo tuần này
+      await new Promise((resolve) => setTimeout(resolve, 3000));
     }
 
     const scheduleData = await page.evaluate(() => {
@@ -182,7 +177,7 @@ async function getSchedule(weekOffset = 0) {
   }
 }
 
-// Hàm lấy thông báo (Cập nhật mới)
+// Hàm lấy thông báo
 async function getNotifications() {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -200,6 +195,7 @@ async function getNotifications() {
       timeout: 60000,
     });
 
+    await page.waitForSelector(".MuiTableBody-root", { timeout: 60000 });
     const notifications = await page.evaluate(() => {
       const rows = document.querySelectorAll(".MuiTableBody-root tr");
       if (!rows.length) throw new Error("Không tìm thấy thông báo!");
@@ -241,6 +237,7 @@ async function getSocialWork() {
       timeout: 60000,
     });
 
+    await page.waitForSelector(".MuiTableBody-root", { timeout: 60000 });
     const socialWork = await page.evaluate(() => {
       const rows = document.querySelectorAll(".MuiTableBody-root tr");
       if (!rows.length) throw new Error("Không tìm thấy dữ liệu công tác xã hội!");
