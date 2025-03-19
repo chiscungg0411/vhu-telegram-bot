@@ -33,8 +33,8 @@ async function launchBrowser() {
         "--disable-gpu",
         "--disable-extensions",
         "--disable-background-networking",
-        "--no-zygote", // Giảm tải trên server
-        "--single-process", // Chạy đơn luồng để tiết kiệm tài nguyên
+        "--no-zygote",
+        "--single-process",
       ],
     });
     console.log("✅ Trình duyệt Puppeteer đã khởi động.");
@@ -52,7 +52,7 @@ async function login(page, username, password, retries = 3) {
       console.log(`🔑 Thử đăng nhập lần ${attempt}...`);
       await page.goto("https://portal.vhu.edu.vn/login", {
         waitUntil: "networkidle2",
-        timeout: 180000, // Tăng timeout lên 180 giây
+        timeout: 180000,
       });
       console.log("✅ Trang đăng nhập đã tải.");
 
@@ -65,13 +65,14 @@ async function login(page, username, password, retries = 3) {
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
       );
 
-      // Nhấn nút đăng nhập và chờ nội dung thay đổi
       await page.click("button[type='submit']");
-      await page.waitForFunction(
-        () => !document.location.href.includes("login"),
-        { timeout: 180000 } // Chờ tối đa 3 phút để URL thay đổi
-      );
+      await page.waitForSelector(".MuiButton-root a[href='/login']", {
+        timeout: 180000,
+      });
 
+      if (page.url().includes("login") && !(await page.$(".MuiButton-root a[href='/login']"))) {
+        throw new Error("Sai tài khoản hoặc mật khẩu!");
+      }
       console.log("✅ Đăng nhập thành công.");
       return true;
     } catch (error) {
@@ -83,7 +84,7 @@ async function login(page, username, password, retries = 3) {
   }
 }
 
-// Hàm lấy lịch học
+// Hàm lấy lịch học (giữ nguyên từ trước)
 async function getSchedule(weekOffset = 0) {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -106,24 +107,36 @@ async function getSchedule(weekOffset = 0) {
       if (!weekTabs.length) throw new Error("Không tìm thấy tab tuần!");
       const targetWeek = weekTabs[offset] || weekTabs[0];
       targetWeek.click();
+
       return new Promise((resolve) => {
         setTimeout(() => {
-          const rows = document.querySelectorAll("table tbody tr");
+          const table = document.querySelector("#psc-table-head");
+          if (!table) throw new Error("Không tìm thấy bảng lịch học!");
+          
+          const headers = Array.from(table.querySelectorAll("thead th")).map(th => th.textContent.trim());
+          const days = headers.slice(1);
           const schedule = {};
-          rows.forEach((row) => {
-            const cols = row.querySelectorAll("td");
-            const day = cols[0]?.textContent.trim();
-            if (day) {
-              schedule[day] = schedule[day] || [];
-              schedule[day].push({
-                subject: cols[1]?.textContent.trim() || "Không rõ",
-                time: cols[2]?.textContent.trim() || "Không rõ",
-                room: cols[3]?.textContent.trim() || "Không rõ",
-                professor: cols[4]?.textContent.trim() || "Không rõ",
-              });
-            }
+
+          days.forEach((day, dayIndex) => {
+            schedule[day] = [];
+            const cells = table.querySelectorAll(`tbody td:nth-child(${dayIndex + 2})`);
+            cells.forEach(cell => {
+              const detail = cell.querySelector(".DetailSchedule");
+              if (detail) {
+                const spans = detail.querySelectorAll("span");
+                schedule[day].push({
+                  room: spans[0]?.textContent.trim() || "Không rõ",
+                  subject: spans[1]?.textContent.trim() || "Không rõ",
+                  classCode: spans[2]?.textContent.replace("LHP: ", "").trim() || "Không rõ",
+                  periods: spans[4]?.textContent.replace("Tiết: ", "").trim() || "Không rõ",
+                  startTime: spans[5]?.textContent.replace("Giờ bắt đầu: ", "").trim() || "Không rõ",
+                  professor: spans[6]?.textContent.replace("GV: ", "").trim() || "Không rõ",
+                });
+              }
+            });
           });
-          const weekInfo = document.querySelector(".MuiTabs-root .MuiTab-root.Mui-selected")?.textContent || "Không rõ";
+
+          const weekInfo = targetWeek.textContent.trim() || "Không rõ";
           resolve({ schedule, week: weekInfo });
         }, 2000);
       });
@@ -139,7 +152,7 @@ async function getSchedule(weekOffset = 0) {
   }
 }
 
-// Hàm lấy thông báo
+// Hàm lấy thông báo (giữ nguyên từ trước)
 async function getNotifications() {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -158,12 +171,12 @@ async function getNotifications() {
     });
 
     const notifications = await page.evaluate(() => {
-      const rows = document.querySelectorAll("table tbody tr");
+      const rows = document.querySelectorAll(".MuiTableBody-root tr");
       if (!rows.length) throw new Error("Không tìm thấy thông báo!");
-      return Array.from(rows).map((row) => {
+      return Array.from(rows).map(row => {
         const cols = row.querySelectorAll("td");
         return {
-          MessageSubject: cols[0]?.textContent.trim() || "Không rõ",
+          MessageSubject: cols[0]?.querySelector("a")?.textContent.trim() || "Không rõ",
           SenderName: cols[1]?.textContent.trim() || "Không rõ",
           CreationDate: cols[2]?.textContent.trim() || "Không rõ",
         };
@@ -180,7 +193,7 @@ async function getNotifications() {
   }
 }
 
-// Hàm lấy công tác xã hội
+// Hàm lấy công tác xã hội (cập nhật mới)
 async function getSocialWork() {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -199,17 +212,18 @@ async function getSocialWork() {
     });
 
     const socialWork = await page.evaluate(() => {
-      const rows = document.querySelectorAll("table tbody tr");
+      const rows = document.querySelectorAll(".MuiTableBody-root tr");
       if (!rows.length) throw new Error("Không tìm thấy dữ liệu công tác xã hội!");
-      return Array.from(rows).map((row) => {
+      return Array.from(rows).map(row => {
         const cols = row.querySelectorAll("td");
         return {
-          Details: cols[0]?.textContent.trim() || "Không rõ",
-          Location: cols[1]?.textContent.trim() || "Không rõ",
-          NumRegisted: cols[2]?.textContent.trim() || "Không rõ",
-          MarkConverted: cols[3]?.textContent.trim() || "0",
-          FromTime: cols[4]?.textContent.trim() || "Không rõ",
-          ToTime: cols[5]?.textContent.trim() || "Không rõ",
+          Index: cols[0]?.textContent.trim() || "Không rõ",
+          Details: cols[1]?.textContent.trim() || "Không rõ",
+          Location: cols[2]?.textContent.trim() || "Không rõ",
+          NumRegistered: cols[3]?.textContent.trim() || "Không rõ",
+          Points: cols[4]?.textContent.trim() || "0",
+          StartTime: cols[5]?.textContent.trim() || "Không rõ",
+          EndTime: cols[6]?.textContent.trim() || "Không rõ",
         };
       });
     });
@@ -260,7 +274,7 @@ bot.onText(/\/tuannay/, async (msg) => {
       message += `📌 *${ngay}:*\n${
         monHocs.length
           ? monHocs
-              .map((m) => `📖 ${m.subject} (${m.time} - ${m.room}, GV: ${m.professor})`)
+              .map((m) => `📖 ${m.subject} (${m.periods}, ${m.startTime} - ${m.room}, GV: ${m.professor})`)
               .join("\n")
           : "❌ Không có lịch"
       }\n\n`;
@@ -281,7 +295,7 @@ bot.onText(/\/tuansau/, async (msg) => {
       message += `📌 *${ngay}:*\n${
         monHocs.length
           ? monHocs
-              .map((m) => `📖 ${m.subject} (${m.time} - ${m.room}, GV: ${m.professor})`)
+              .map((m) => `📖 ${m.subject} (${m.periods}, ${m.startTime} - ${m.room}, GV: ${m.professor})`)
               .join("\n")
           : "❌ Không có lịch"
       }\n\n`;
@@ -315,7 +329,7 @@ bot.onText(/\/congtac/, async (msg) => {
     const congTacData = await getSocialWork();
     let message = "📋 *Công tác xã hội:*\n*------------------------------------*\n";
     congTacData.slice(0, 5).forEach((c, i) => {
-      message += `📌 *${i + 1}. ${c.Details}*\n📍 ${c.Location}\n👥 ${c.NumRegisted} người đăng ký\n⭐ ${c.MarkConverted} điểm\n🕛 ${c.FromTime} - ${c.ToTime}\n\n`;
+      message += `📌 *${c.Index}. ${c.Details}*\n📍 ${c.Location || "Chưa cập nhật"}\n👥 ${c.NumRegistered} người đăng ký\n⭐ ${c.Points} điểm\n🕛 ${c.StartTime} - ${c.EndTime}\n\n`;
     });
     if (congTacData.length > 5) message += `📢 Còn ${congTacData.length - 5} công tác khác.`;
     bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
