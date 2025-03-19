@@ -1,86 +1,52 @@
-import puppeteer from "puppeteer-core";
-import StealthPlugin from "puppeteer-extra-plugin-stealth";
-import puppeteerExtra from "puppeteer-extra";
+async function getSocialWork() {
+  const browser = await launchBrowser();
+  const page = await browser.newPage();
+  try {
+    // Tắt tải hình ảnh để tăng tốc
+    await page.setRequestInterception(true);
+    page.on("request", (req) => {
+      if (req.resourceType() === "image") req.abort();
+      else req.continue();
+    });
 
-puppeteerExtra.use(StealthPlugin());
+    console.log("🔑 Đang đăng nhập vào portal...");
+    await login(page, process.env.VHU_EMAIL, process.env.VHU_PASSWORD);
 
-async function getSchedule(username, password, retries = 3) {
-    for (let attempt = 1; attempt <= retries; attempt++) {
-        const browser = await puppeteerExtra.launch({
-            executablePath: '/usr/bin/google-chrome-stable',
-            headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
-        });
+    console.log("📋 Truy cập trang công tác xã hội...");
+    await page.goto("https://portal.vhu.edu.vn/student/socialworks", {
+      waitUntil: "domcontentloaded",
+      timeout: 600000, // Tăng timeout lên 10 phút
+    });
+    console.log("✅ Trang công tác xã hội đã tải xong.");
 
-        const page = await browser.newPage();
+    // Chờ bảng dữ liệu xuất hiện
+    console.log("⏳ Đang chờ dữ liệu công tác xã hội...");
+    await page.waitForSelector("table tbody tr", { timeout: 60000 }); // Tăng timeout lên 60 giây
+    console.log("✅ Dữ liệu công tác xã hội đã sẵn sàng.");
 
-        try {
-            console.log(`🔄 Thử lần ${attempt}: Truy cập trang đăng nhập...`);
-            await page.goto("https://portal.vhu.edu.vn/login", { 
-                waitUntil: "domcontentloaded", 
-                timeout: 180000 
-            });
-            console.log("✅ Trang đăng nhập đã tải xong.");
+    // Trích xuất dữ liệu
+    const socialWork = await page.evaluate(() => {
+      const rows = document.querySelectorAll("table tbody tr");
+      if (!rows.length) throw new Error("Không tìm thấy dữ liệu công tác xã hội!");
+      return Array.from(rows).map((row) => {
+        const cols = row.querySelectorAll("td");
+        return {
+          Details: cols[0]?.textContent.trim() || "Không rõ",
+          Location: cols[1]?.textContent.trim() || "Không rõ",
+          NumRegisted: cols[2]?.textContent.trim() || "Không rõ",
+          MarkConverted: cols[3]?.textContent.trim() || "0",
+          FromTime: cols[4]?.textContent.trim() || "Không rõ",
+          ToTime: cols[5]?.textContent.trim() || "Không rõ",
+        };
+      });
+    });
 
-            console.log("⏳ Chờ trang tải...");
-            await new Promise(resolve => setTimeout(resolve, 5000));
-
-            console.log("🔎 Kiểm tra ô nhập tài khoản...");
-            if (!(await page.$("input[name='email']"))) {
-                console.error("❌ Không tìm thấy ô nhập email!");
-                await browser.close();
-                return "Lỗi: Không tìm thấy ô nhập email!";
-            }
-
-            console.log("✍️ Nhập tài khoản...");
-            await page.type("input[name='email']", username, { delay: 100 });
-            await page.type("input[name='password']", password, { delay: 100 });
-
-            console.log("🔓 Đăng nhập...");
-            await page.click("button[type='submit']");
-
-            console.log("⌛ Chờ trang load sau đăng nhập...");
-            await page.waitForNavigation({ 
-                waitUntil: "domcontentloaded", 
-                timeout: 180000 
-            });
-            console.log("✅ Đăng nhập thành công.");
-
-            if (page.url().includes("login")) {
-                console.error("❌ Sai tài khoản hoặc mật khẩu!");
-                await browser.close();
-                return "Sai tài khoản hoặc mật khẩu!";
-            }
-
-            console.log("📅 Truy cập trang lịch học...");
-            await page.goto("https://portal.vhu.edu.vn/student/schedules", { 
-                waitUntil: "domcontentloaded", 
-                timeout: 180000 
-            });
-            console.log("✅ Trang lịch học đã tải xong.");
-
-            console.log("📜 Kiểm tra dữ liệu lịch học...");
-            await new Promise(resolve => setTimeout(resolve, 3000));
-
-            if (!(await page.$("table tbody tr"))) {
-                console.error("❌ Không tìm thấy lịch học!");
-                await browser.close();
-                return "Không có lịch học!";
-            }
-
-            console.log("✅ Lịch học lấy được!");
-            await browser.close();
-            return "Lấy lịch học thành công!";
-        } catch (error) {
-            console.error(`❌ Lỗi khi lấy lịch học (lần ${attempt}):`, error.message);
-            await browser.close();
-            if (attempt === retries) {
-                return `Không thể lấy lịch học sau ${retries} lần thử. Chi tiết: ${error.message}`;
-            }
-            console.log(`⏳ Thử lại sau 5 giây...`);
-            await new Promise(resolve => setTimeout(resolve, 5000));
-        }
-    }
+    console.log("✅ Đã lấy dữ liệu công tác xã hội.");
+    await browser.close();
+    return socialWork;
+  } catch (error) {
+    console.error("❌ Lỗi trong getSocialWork:", error.message);
+    await browser.close();
+    throw error;
+  }
 }
-
-export default getSchedule;
