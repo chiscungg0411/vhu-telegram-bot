@@ -121,7 +121,6 @@ async function getSchedule(weekOffset = 0) {
     });
     console.log(`🌐 URL sau khi truy cập: ${page.url()}`);
 
-    // Kiểm tra nội dung trang nếu không tìm thấy selector
     await page.waitForSelector(".MuiTab-root", { timeout: 60000 }).catch(async () => {
       const content = await page.content();
       throw new Error(`Không tìm thấy .MuiTab-root. Nội dung trang: ${content.slice(0, 500)}...`);
@@ -200,7 +199,7 @@ async function getNotifications() {
 
     await login(page, process.env.VHU_EMAIL, process.env.VHU_PASSWORD);
     console.log("🔔 Đang truy cập trang thông báo...");
-    await page.goto("https://portal.vhu.edu.vn/student/notifications", {
+    await page.goto("https://portal.vhu.edu.vn/student/index", {
       waitUntil: "networkidle2",
       timeout: 60000,
     });
@@ -247,7 +246,7 @@ async function getSocialWork() {
 
     await login(page, process.env.VHU_EMAIL, process.env.VHU_PASSWORD);
     console.log("📋 Đang truy cập trang công tác xã hội...");
-    await page.goto("https://portal.vhu.edu.vn/student/socialworks", {
+    await page.goto("https://portal.vhu.edu.vn/student/congtacxahoi", {
       waitUntil: "networkidle2",
       timeout: 60000,
     });
