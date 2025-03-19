@@ -33,6 +33,8 @@ async function launchBrowser() {
         "--disable-gpu",
         "--disable-extensions",
         "--disable-background-networking",
+        "--no-zygote", // Giảm tải trên server
+        "--single-process", // Chạy đơn luồng để tiết kiệm tài nguyên
       ],
     });
     console.log("✅ Trình duyệt Puppeteer đã khởi động.");
@@ -50,7 +52,7 @@ async function login(page, username, password, retries = 3) {
       console.log(`🔑 Thử đăng nhập lần ${attempt}...`);
       await page.goto("https://portal.vhu.edu.vn/login", {
         waitUntil: "networkidle2",
-        timeout: 120000, // Tăng timeout lên 120 giây
+        timeout: 180000, // Tăng timeout lên 180 giây
       });
       console.log("✅ Trang đăng nhập đã tải.");
 
@@ -59,26 +61,22 @@ async function login(page, username, password, retries = 3) {
       await page.type("input[name='password']", password, { delay: 50 });
       console.log("✍️ Đã nhập thông tin đăng nhập.");
 
-      // Thêm user-agent để tránh bị chặn
       await page.setUserAgent(
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
       );
 
-      await Promise.all([
-        page.click("button[type='submit']"),
-        page.waitForNavigation({ waitUntil: "networkidle2", timeout: 120000 }),
-      ]);
+      // Nhấn nút đăng nhập và chờ nội dung thay đổi
+      await page.click("button[type='submit']");
+      await page.waitForFunction(
+        () => !document.location.href.includes("login"),
+        { timeout: 180000 } // Chờ tối đa 3 phút để URL thay đổi
+      );
 
-      // Kiểm tra xem đã đăng nhập thành công chưa
-      await page.waitForSelector("body", { timeout: 30000 }); // Đảm bảo trang đã tải
-      if (page.url().includes("login")) {
-        throw new Error("Sai tài khoản hoặc mật khẩu!");
-      }
       console.log("✅ Đăng nhập thành công.");
       return true;
     } catch (error) {
       console.error(`❌ Lỗi đăng nhập lần ${attempt}:`, error.message);
-      if (attempt === retries) throw error;
+      if (attempt === retries) throw new Error(`Đăng nhập thất bại sau ${retries} lần: ${error.message}`);
       console.log("⏳ Thử lại sau 5 giây...");
       await new Promise((resolve) => setTimeout(resolve, 5000));
     }
@@ -100,7 +98,7 @@ async function getSchedule(weekOffset = 0) {
     console.log("📅 Đang truy cập trang lịch học...");
     await page.goto("https://portal.vhu.edu.vn/student/schedules", {
       waitUntil: "networkidle2",
-      timeout: 120000,
+      timeout: 180000,
     });
 
     const scheduleData = await page.evaluate((offset) => {
@@ -156,7 +154,7 @@ async function getNotifications() {
     console.log("🔔 Đang truy cập trang thông báo...");
     await page.goto("https://portal.vhu.edu.vn/student/notifications", {
       waitUntil: "networkidle2",
-      timeout: 120000,
+      timeout: 180000,
     });
 
     const notifications = await page.evaluate(() => {
@@ -197,7 +195,7 @@ async function getSocialWork() {
     console.log("📋 Đang truy cập trang công tác xã hội...");
     await page.goto("https://portal.vhu.edu.vn/student/socialworks", {
       waitUntil: "networkidle2",
-      timeout: 120000,
+      timeout: 180000,
     });
 
     const socialWork = await page.evaluate(() => {
