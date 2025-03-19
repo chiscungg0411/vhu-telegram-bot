@@ -10,12 +10,9 @@
     "node-telegram-bot-api": "^0.64.0",
     "express": "^4.19.2",
     "axios": "^1.7.2",
+    "fs.promises": "^0.1.0",
     "node-cache": "^5.1.2",
-    "axios-retry": "^4.0.0",
-    "puppeteer": "^24.4.0",
-    "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "dotenv": "^16.4.7"
+    "axios-retry": "^4.0.0"
   },
   "author": "Chí Cường",
   "license": "MIT"

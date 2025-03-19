@@ -3,4 +3,3 @@ node_modules/
 *.log
 debug.png
 debug_login.png
-cache/

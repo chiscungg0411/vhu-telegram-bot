@@ -58,38 +58,24 @@ async function saveToCache(file, data) {
 }
 
 async function ensureCacheDir() {
-    try {
-      await fs.mkdir("./cache", { recursive: true });
-      console.log("✅ Thư mục cache đã được tạo hoặc đã tồn tại.");
-    } catch (error) {
-      console.error("❌ Lỗi tạo thư mục cache:", error.message);
-      throw error; // Ném lỗi để xử lý ở cấp cao hơn nếu cần
-    }
+  try {
+    await fs.mkdir("./cache", { recursive: true });
+    console.log("✅ Thư mục cache đã được tạo.");
+  } catch (error) {
+    console.error("❌ Lỗi tạo thư mục cache:", error.message);
   }
-  
-  async function saveToCache(file, data) {
-    try {
-      await ensureCacheDir(); // Đảm bảo thư mục tồn tại trước khi ghi
-      cache.set(file, data);
-      await fs.writeFile(file, JSON.stringify({ timestamp: Date.now(), data }), "utf8");
-    } catch (error) {
-      console.error(`❌ Lỗi ghi cache vào ${file}:`, error.message);
-    }
-  }
+}
 
 const API_BASE = "https://portal_api.vhu.edu.vn/api/student";
 const AUTH_TOKEN = process.env.API_AUTH_TOKEN;
 
 async function fetchData(endpoint, params = {}) {
   try {
-    const startTime = Date.now();
-    console.log(`Calling API: ${API_BASE}${endpoint} with params:`, params); // Debug log
     const response = await axios.get(`${API_BASE}${endpoint}`, {
       headers: { Authorization: AUTH_TOKEN },
       params,
-      timeout: 5000, // 5 giây timeout
+      timeout: 10000, // 10 giây timeout
     });
-    console.log(`API ${endpoint} responded successfully in ${Date.now() - startTime}ms`);
     return response.data;
   } catch (error) {
     console.error(`❌ Lỗi gọi API ${endpoint}:`, error.message, error.response?.status);
@@ -97,21 +83,29 @@ async function fetchData(endpoint, params = {}) {
   }
 }
 
-// Lấy dữ liệu ban đầu (weeks, yearandterm) cùng lúc
-async function fetchInitialData() {
-  const [weeks, yearandterm] = await Promise.all([
-    loadFromCache(CACHE_FILE.weeks) || fetchData("/weeks"),
-    loadFromCache(CACHE_FILE.yearandterm) || fetchData("/yearandterm"),
-  ]);
-  await Promise.all([
-    saveToCache(CACHE_FILE.weeks, weeks),
-    saveToCache(CACHE_FILE.yearandterm, yearandterm),
-  ]);
-  return { weeks, yearandterm: yearandterm };
+// Lấy danh sách tuần
+async function getWeeks() {
+  const cached = await loadFromCache(CACHE_FILE.weeks);
+  if (cached) return cached;
+
+  const data = await fetchData("/weeks");
+  await saveToCache(CACHE_FILE.weeks, data);
+  return data;
+}
+
+// Lấy năm và kỳ học
+async function getYearAndTerm() {
+  const cached = await loadFromCache(CACHE_FILE.yearandterm);
+  if (cached) return cached;
+
+  const data = await fetchData("/yearandterm");
+  await saveToCache(CACHE_FILE.yearandterm, data);
+  return data;
 }
 
 // Tính tuần hiện tại
-async function getCurrentWeek(weeks) {
+async function getCurrentWeek() {
+  const weeks = await getWeeks();
   const now = new Date();
   return weeks.find(w => {
     const [beginDay, beginMonth, beginYear] = w.BeginDate.split("/");
@@ -124,19 +118,18 @@ async function getCurrentWeek(weeks) {
 
 // Lấy lịch học
 async function getSchedule(weekOffset = 0) {
-  const startTime = Date.now();
-  const { weeks, yearandterm } = await fetchInitialData();
-  const currentWeek = (await getCurrentWeek(weeks)) + weekOffset;
-  const params = { namhoc: yearandterm.CurrentYear, hocky: yearandterm.CurrentTerm, tuan: currentWeek };
+  const currentWeek = (await getCurrentWeek()) + weekOffset;
+  const { CurrentYear, CurrentTerm } = await getYearAndTerm();
+  const params = { namhoc: CurrentYear, hocky: CurrentTerm, tuan: currentWeek };
   const cached = await loadFromCache(CACHE_FILE.schedules);
   if (cached?.[`week${weekOffset}`]) return cached[`week${weekOffset}`];
 
+  const weeks = await getWeeks();
   const data = await fetchData("/DrawingSchedules", params);
   const lichHoc = processScheduleData(data, weeks.find(w => w.Week === currentWeek));
   const cacheData = (await loadFromCache(CACHE_FILE.schedules)) || {};
   cacheData[`week${weekOffset}`] = lichHoc;
   await saveToCache(CACHE_FILE.schedules, cacheData);
-  console.log(`Fetched schedule for week ${currentWeek} in ${Date.now() - startTime}ms`);
   return lichHoc;
 }
 
@@ -161,27 +154,23 @@ function processScheduleData(apiData, weekData) {
 
 // Lấy thông báo
 async function getNotifications() {
-  const startTime = Date.now();
   const cached = await loadFromCache(CACHE_FILE.notifications);
   if (cached) return cached;
 
   const data = await fetchData("/notifications");
   const sortedData = data.sort((a, b) => new Date(b.CreationDate) - new Date(a.CreationDate));
   await saveToCache(CACHE_FILE.notifications, sortedData);
-  console.log(`Fetched notifications in ${Date.now() - startTime}ms`);
   return sortedData;
 }
 
 // Lấy công tác xã hội
 async function getSocialWork() {
-  const startTime = Date.now();
   const cached = await loadFromCache(CACHE_FILE.socialWork);
   if (cached) return cached;
 
   const data = await fetchData("/socialWork");
   const sortedData = data.result.sort((a, b) => new Date(b.UpdateDate) - new Date(a.UpdateDate));
   await saveToCache(CACHE_FILE.socialWork, sortedData);
-  console.log(`Fetched social work in ${Date.now() - startTime}ms`);
   return sortedData;
 }
 
@@ -225,8 +214,8 @@ bot.onText(/\/tuannay/, async (msg) => {
     }
     bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
   } catch (error) {
-    console.error("❌ Lỗi lấy lịch học tuần này:", error.message);
-    bot.sendMessage(chatId, `❌ Lỗi: Không thể lấy lịch học tuần này. Vui lòng kiểm tra token hoặc thử lại sau. Chi tiết: ${error.message}`);
+    console.error("❌ Lỗi lấy lịch học:", error.message);
+    bot.sendMessage(chatId, `❌ Lỗi: Không thể lấy lịch học. Vui lòng kiểm tra token hoặc thử lại sau. Chi tiết: ${error.message}`);
   }
 });
 
