@@ -75,6 +75,8 @@ async function login(page, username, password, retries = 5) {
 
       await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 60000 });
       const finalUrl = page.url();
+      console.log(`🌐 URL sau đăng nhập: ${finalUrl}`);
+
       if (finalUrl.includes("/login")) {
         const errorMessage = await page.evaluate(() =>
           document.body.innerText.includes("Username or password is incorrect")
@@ -89,6 +91,8 @@ async function login(page, username, password, retries = 5) {
     } catch (error) {
       console.error(`❌ Lỗi đăng nhập lần ${attempt}:`, error.message);
       console.log(`🌐 URL khi lỗi: ${page.url()}`);
+      const pageContent = await page.content();
+      console.log(`📄 Nội dung trang khi lỗi: ${pageContent.slice(0, 500)}...`);
       if (attempt === retries) throw new Error(`Đăng nhập thất bại sau ${retries} lần: ${error.message}`);
       console.log("⏳ Thử lại sau 5 giây...");
       await page.close();
@@ -115,22 +119,28 @@ async function getSchedule(weekOffset = 0) {
       waitUntil: "networkidle2",
       timeout: 60000,
     });
+    console.log(`🌐 URL sau khi truy cập: ${page.url()}`);
 
-    // Chờ tab "TKB TUẦN" và chọn tuần
-    await page.waitForSelector(".MuiTab-root", { timeout: 60000 });
+    // Kiểm tra nội dung trang nếu không tìm thấy selector
+    await page.waitForSelector(".MuiTab-root", { timeout: 60000 }).catch(async () => {
+      const content = await page.content();
+      throw new Error(`Không tìm thấy .MuiTab-root. Nội dung trang: ${content.slice(0, 500)}...`);
+    });
+
     const tabs = await page.$$(".MuiTab-root");
     if (tabs.length > 0) {
-      await tabs[0].click(); // Chọn tab "TKB TUẦN" (index 0)
-      await new Promise((resolve) => setTimeout(resolve, 3000)); // Chờ dữ liệu tải
+      await tabs[0].click(); // Chọn tab "TKB TUẦN"
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    } else {
+      throw new Error("Không tìm thấy tab nào!");
     }
 
-    // Chọn tuần (tuần hiện tại hoặc tuần sau)
     const weekButtons = await page.$$(".MuiButton-containedPrimary");
     if (weekOffset === 1 && weekButtons[2]) {
-      await weekButtons[2].click(); // Nút "SkipNext" để sang tuần sau
+      await weekButtons[2].click(); // Nút "SkipNext"
       await new Promise((resolve) => setTimeout(resolve, 3000));
     } else if (weekButtons[1]) {
-      await weekButtons[1].click(); // Nút "Hiện tại" để đảm bảo tuần này
+      await weekButtons[1].click(); // Nút "Hiện tại"
       await new Promise((resolve) => setTimeout(resolve, 3000));
     }
 
@@ -141,7 +151,7 @@ async function getSchedule(weekOffset = 0) {
       const headers = Array.from(table.querySelectorAll("thead th")).map((th) =>
         th.textContent.trim()
       );
-      const days = headers.slice(1); // Bỏ cột "Tiết"
+      const days = headers.slice(1);
       const schedule = {};
 
       days.forEach((day, dayIndex) => {
@@ -194,8 +204,13 @@ async function getNotifications() {
       waitUntil: "networkidle2",
       timeout: 60000,
     });
+    console.log(`🌐 URL sau khi truy cập: ${page.url()}`);
 
-    await page.waitForSelector(".MuiTableBody-root", { timeout: 60000 });
+    await page.waitForSelector(".MuiTableBody-root", { timeout: 60000 }).catch(async () => {
+      const content = await page.content();
+      throw new Error(`Không tìm thấy .MuiTableBody-root. Nội dung trang: ${content.slice(0, 500)}...`);
+    });
+
     const notifications = await page.evaluate(() => {
       const rows = document.querySelectorAll(".MuiTableBody-root tr");
       if (!rows.length) throw new Error("Không tìm thấy thông báo!");
@@ -236,8 +251,13 @@ async function getSocialWork() {
       waitUntil: "networkidle2",
       timeout: 60000,
     });
+    console.log(`🌐 URL sau khi truy cập: ${page.url()}`);
 
-    await page.waitForSelector(".MuiTableBody-root", { timeout: 60000 });
+    await page.waitForSelector(".MuiTableBody-root", { timeout: 60000 }).catch(async () => {
+      const content = await page.content();
+      throw new Error(`Không tìm thấy .MuiTableBody-root. Nội dung trang: ${content.slice(0, 500)}...`);
+    });
+
     const socialWork = await page.evaluate(() => {
       const rows = document.querySelectorAll(".MuiTableBody-root tr");
       if (!rows.length) throw new Error("Không tìm thấy dữ liệu công tác xã hội!");
