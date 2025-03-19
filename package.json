@@ -12,7 +12,8 @@
     "axios": "^1.7.2",
     "fs.promises": "^0.1.0",
     "node-cache": "^5.1.2",
-    "axios-retry": "^4.0.0"
+    "axios-retry": "^4.0.0",
+    "puppeteer": "^22.6.1"
   },
   "author": "Chí Cường",
   "license": "MIT"
