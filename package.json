@@ -1,6 +1,7 @@
 {
   "name": "vhu-telegram-bot",
   "version": "1.0.0",
+  "description": "Telegram bot for VHU portal",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
@@ -11,6 +12,11 @@
     "axios": "^1.7.2",
     "node-cache": "^5.1.2",
     "axios-retry": "^4.0.0",
-    "dotenv": "^16.4.5" 
-  }
+    "puppeteer": "^24.4.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "dotenv": "^16.4.7"
+  },
+  "author": "Chí Cường",
+  "license": "MIT"
 }

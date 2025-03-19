@@ -58,13 +58,24 @@ async function saveToCache(file, data) {
 }
 
 async function ensureCacheDir() {
-  try {
-    await fs.mkdir("./cache", { recursive: true });
-    console.log("✅ Thư mục cache đã được tạo.");
-  } catch (error) {
-    console.error("❌ Lỗi tạo thư mục cache:", error.message);
+    try {
+      await fs.mkdir("./cache", { recursive: true });
+      console.log("✅ Thư mục cache đã được tạo hoặc đã tồn tại.");
+    } catch (error) {
+      console.error("❌ Lỗi tạo thư mục cache:", error.message);
+      throw error; // Ném lỗi để xử lý ở cấp cao hơn nếu cần
+    }
   }
-}
+  
+  async function saveToCache(file, data) {
+    try {
+      await ensureCacheDir(); // Đảm bảo thư mục tồn tại trước khi ghi
+      cache.set(file, data);
+      await fs.writeFile(file, JSON.stringify({ timestamp: Date.now(), data }), "utf8");
+    } catch (error) {
+      console.error(`❌ Lỗi ghi cache vào ${file}:`, error.message);
+    }
+  }
 
 const API_BASE = "https://portal_api.vhu.edu.vn/api/student";
 const AUTH_TOKEN = process.env.API_AUTH_TOKEN;
