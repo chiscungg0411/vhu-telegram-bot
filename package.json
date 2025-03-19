@@ -1,7 +1,6 @@
 {
   "name": "vhu-telegram-bot",
   "version": "1.0.0",
-  "description": "Telegram bot for VHU portal",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
@@ -10,10 +9,7 @@
     "node-telegram-bot-api": "^0.64.0",
     "express": "^4.19.2",
     "axios": "^1.7.2",
-    "fs.promises": "^0.1.0",
     "node-cache": "^5.1.2",
     "axios-retry": "^4.0.0"
-  },
-  "author": "Chí Cường",
-  "license": "MIT"
+  }
 }
