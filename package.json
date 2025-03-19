@@ -12,7 +12,8 @@
     "axios": "^1.7.2",
     "fs.promises": "^0.1.0",
     "node-cache": "^5.1.2",
-    "axios-retry": "^4.0.0"
+    "axios-retry": "^4.0.0",
+    "dotenv": "^16.4.7"
   },
   "author": "Chí Cường",
   "license": "MIT"
