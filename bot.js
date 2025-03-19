@@ -38,14 +38,14 @@ async function launchBrowser() {
 async function login(page, username, password) {
   await page.goto("https://portal.vhu.edu.vn/login", {
     waitUntil: "domcontentloaded",
-    timeout: 300000,
+    timeout: 600000, // Tăng timeout lên 10 phút
   });
-  await page.waitForSelector("input[name='email']", { timeout: 30000 });
+  await page.waitForSelector("input[name='email']", { timeout: 60000 });
   await page.type("input[name='email']", username, { delay: 100 });
   await page.type("input[name='password']", password, { delay: 100 });
   await Promise.all([
     page.click("button[type='submit']"),
-    page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 300000 }),
+    page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 600000 }),
   ]);
   if (page.url().includes("login")) throw new Error("Sai tài khoản hoặc mật khẩu!");
   console.log("✅ Đăng nhập thành công.");
@@ -65,13 +65,12 @@ async function getSchedule(weekOffset = 0) {
     await login(page, process.env.VHU_EMAIL, process.env.VHU_PASSWORD);
     await page.goto("https://portal.vhu.edu.vn/student/schedules", {
       waitUntil: "domcontentloaded",
-      timeout: 300000,
+      timeout: 600000,
     });
 
-    // Trích xuất dữ liệu lịch học
     const scheduleData = await page.evaluate((offset) => {
       const weekTabs = document.querySelectorAll(".MuiTabs-root .MuiTab-root");
-      const targetWeek = weekTabs[offset] || weekTabs[0]; // Tuần này (0) hoặc tuần sau (1)
+      const targetWeek = weekTabs[offset] || weekTabs[0];
       targetWeek.click();
       const rows = document.querySelectorAll("table tbody tr");
       const schedule = {};
@@ -114,7 +113,7 @@ async function getNotifications() {
     await login(page, process.env.VHU_EMAIL, process.env.VHU_PASSWORD);
     await page.goto("https://portal.vhu.edu.vn/student/notifications", {
       waitUntil: "domcontentloaded",
-      timeout: 300000,
+      timeout: 600000,
     });
 
     const notifications = await page.evaluate(() => {
@@ -137,7 +136,7 @@ async function getNotifications() {
   }
 }
 
-// Hàm lấy công tác xã hội
+// Hàm lấy công tác xã hội (đã sửa)
 async function getSocialWork() {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -148,30 +147,41 @@ async function getSocialWork() {
       else req.continue();
     });
 
+    console.log("🔑 Đang đăng nhập vào portal...");
     await login(page, process.env.VHU_EMAIL, process.env.VHU_PASSWORD);
+
+    console.log("📋 Truy cập trang công tác xã hội...");
     await page.goto("https://portal.vhu.edu.vn/student/socialworks", {
       waitUntil: "domcontentloaded",
-      timeout: 300000,
+      timeout: 600000,
     });
+    console.log("✅ Trang công tác xã hội đã tải xong.");
+
+    console.log("⏳ Đang chờ dữ liệu công tác xã hội...");
+    await page.waitForSelector("table tbody tr", { timeout: 60000 });
+    console.log("✅ Dữ liệu công tác xã hội đã sẵn sàng.");
 
     const socialWork = await page.evaluate(() => {
       const rows = document.querySelectorAll("table tbody tr");
+      if (!rows.length) throw new Error("Không tìm thấy dữ liệu công tác xã hội!");
       return Array.from(rows).map((row) => {
         const cols = row.querySelectorAll("td");
         return {
-          Details: cols[0]?.textContent.trim(),
-          Location: cols[1]?.textContent.trim(),
-          NumRegisted: cols[2]?.textContent.trim(),
-          MarkConverted: cols[3]?.textContent.trim(),
-          FromTime: cols[4]?.textContent.trim(),
-          ToTime: cols[5]?.textContent.trim(),
+          Details: cols[0]?.textContent.trim() || "Không rõ",
+          Location: cols[1]?.textContent.trim() || "Không rõ",
+          NumRegisted: cols[2]?.textContent.trim() || "Không rõ",
+          MarkConverted: cols[3]?.textContent.trim() || "0",
+          FromTime: cols[4]?.textContent.trim() || "Không rõ",
+          ToTime: cols[5]?.textContent.trim() || "Không rõ",
         };
       });
     });
 
+    console.log("✅ Đã lấy dữ liệu công tác xã hội.");
     await browser.close();
     return socialWork;
   } catch (error) {
+    console.error("❌ Lỗi trong getSocialWork:", error.message);
     await browser.close();
     throw error;
   }
@@ -189,7 +199,7 @@ app.get("/ping", (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server chạy trên port ${PORT}`);
-  bot.startPolling(); // Chuyển sang polling vì không dùng API
+  bot.startPolling();
   console.log("✅ Bot đang chạy ở chế độ polling...");
 });
 
