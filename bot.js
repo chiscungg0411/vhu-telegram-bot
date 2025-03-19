@@ -24,8 +24,8 @@ process.on("uncaughtException", (error) => {
 async function launchBrowser() {
   try {
     const browser = await puppeteerExtra.launch({
-      executablePath: "/usr/bin/google-chrome-stable",
-      headless: true,
+      executablePath: process.env.CHROME_PATH || "/usr/bin/google-chrome-stable",
+      headless: "new",
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
@@ -35,7 +35,11 @@ async function launchBrowser() {
         "--disable-background-networking",
         "--no-zygote",
         "--single-process",
+        "--disable-accelerated-2d-canvas",
+        "--disable-features=site-per-process",
       ],
+      defaultViewport: { width: 1280, height: 720 },
+      timeout: 60000,
     });
     console.log("✅ Trình duyệt Puppeteer đã khởi động.");
     return browser;
@@ -45,14 +49,14 @@ async function launchBrowser() {
   }
 }
 
-// Hàm đăng nhập vào portal với retry
+// Hàm đăng nhập vào portal
 async function login(page, username, password, retries = 3) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       console.log(`🔑 Thử đăng nhập lần ${attempt}...`);
       await page.goto("https://portal.vhu.edu.vn/login", {
         waitUntil: "networkidle2",
-        timeout: 180000,
+        timeout: 300000, // 5 phút
       });
       console.log("✅ Trang đăng nhập đã tải.");
 
@@ -65,18 +69,26 @@ async function login(page, username, password, retries = 3) {
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
       );
 
+      await page.waitForSelector("button[type='submit']", { timeout: 30000 });
       await page.click("button[type='submit']");
-      await page.waitForSelector(".MuiButton-root a[href='/login']", {
-        timeout: 180000,
-      });
+      console.log("⏳ Đang chờ chuyển hướng sau đăng nhập...");
 
-      if (page.url().includes("login") && !(await page.$(".MuiButton-root a[href='/login']"))) {
-        throw new Error("Sai tài khoản hoặc mật khẩu!");
+      // Chờ URL thay đổi hoặc một phần tử đặc trưng sau đăng nhập
+      await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 300000 });
+      const currentUrl = page.url();
+      console.log(`🌐 URL hiện tại: ${currentUrl}`);
+
+      if (currentUrl.includes("/login")) {
+        throw new Error("Đăng nhập thất bại: Vẫn ở trang login, kiểm tra tài khoản/mật khẩu hoặc CAPTCHA.");
       }
+
+      // Kiểm tra một phần tử đặc trưng sau đăng nhập (thay thế nếu cần)
+      await page.waitForSelector("body", { timeout: 30000 }); // Thay bằng selector thật nếu có
       console.log("✅ Đăng nhập thành công.");
       return true;
     } catch (error) {
       console.error(`❌ Lỗi đăng nhập lần ${attempt}:`, error.message);
+      console.log(`🌐 URL khi lỗi: ${page.url()}`);
       if (attempt === retries) throw new Error(`Đăng nhập thất bại sau ${retries} lần: ${error.message}`);
       console.log("⏳ Thử lại sau 5 giây...");
       await new Promise((resolve) => setTimeout(resolve, 5000));
@@ -84,7 +96,7 @@ async function login(page, username, password, retries = 3) {
   }
 }
 
-// Hàm lấy lịch học (giữ nguyên từ trước)
+// Hàm lấy lịch học
 async function getSchedule(weekOffset = 0) {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -99,7 +111,7 @@ async function getSchedule(weekOffset = 0) {
     console.log("📅 Đang truy cập trang lịch học...");
     await page.goto("https://portal.vhu.edu.vn/student/schedules", {
       waitUntil: "networkidle2",
-      timeout: 180000,
+      timeout: 300000,
     });
 
     const scheduleData = await page.evaluate((offset) => {
@@ -152,7 +164,7 @@ async function getSchedule(weekOffset = 0) {
   }
 }
 
-// Hàm lấy thông báo (giữ nguyên từ trước)
+// Hàm lấy thông báo
 async function getNotifications() {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -167,7 +179,7 @@ async function getNotifications() {
     console.log("🔔 Đang truy cập trang thông báo...");
     await page.goto("https://portal.vhu.edu.vn/student/notifications", {
       waitUntil: "networkidle2",
-      timeout: 180000,
+      timeout: 300000,
     });
 
     const notifications = await page.evaluate(() => {
@@ -193,7 +205,7 @@ async function getNotifications() {
   }
 }
 
-// Hàm lấy công tác xã hội (cập nhật mới)
+// Hàm lấy công tác xã hội
 async function getSocialWork() {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -208,7 +220,7 @@ async function getSocialWork() {
     console.log("📋 Đang truy cập trang công tác xã hội...");
     await page.goto("https://portal.vhu.edu.vn/student/socialworks", {
       waitUntil: "networkidle2",
-      timeout: 180000,
+      timeout: 300000,
     });
 
     const socialWork = await page.evaluate(() => {
