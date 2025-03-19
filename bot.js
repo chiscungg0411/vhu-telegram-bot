@@ -78,6 +78,8 @@ async function login(page, username, password, retries = 5) {
       console.log(`🌐 URL sau đăng nhập: ${finalUrl}`);
 
       if (finalUrl.includes("/login")) {
+        const content = await page.content();
+        console.log(`📄 Nội dung trang sau đăng nhập thất bại: ${content.slice(0, 500)}...`);
         const errorMessage = await page.evaluate(() =>
           document.body.innerText.includes("Username or password is incorrect")
             ? "Sai tên đăng nhập hoặc mật khẩu."
@@ -120,6 +122,8 @@ async function getSchedule(weekOffset = 0) {
       timeout: 60000,
     });
     console.log(`🌐 URL sau khi truy cập: ${page.url()}`);
+    const scheduleContent = await page.content();
+    console.log(`📄 Nội dung trang lịch học: ${scheduleContent.slice(0, 500)}...`);
 
     await page.waitForSelector(".MuiTab-root", { timeout: 60000 }).catch(async () => {
       const content = await page.content();
@@ -204,6 +208,8 @@ async function getNotifications() {
       timeout: 60000,
     });
     console.log(`🌐 URL sau khi truy cập: ${page.url()}`);
+    const notifContent = await page.content();
+    console.log(`📄 Nội dung trang thông báo: ${notifContent.slice(0, 500)}...`);
 
     await page.waitForSelector(".MuiTableBody-root", { timeout: 60000 }).catch(async () => {
       const content = await page.content();
@@ -251,6 +257,8 @@ async function getSocialWork() {
       timeout: 60000,
     });
     console.log(`🌐 URL sau khi truy cập: ${page.url()}`);
+    const socialContent = await page.content();
+    console.log(`📄 Nội dung trang công tác: ${socialContent.slice(0, 500)}...`);
 
     await page.waitForSelector(".MuiTableBody-root", { timeout: 60000 }).catch(async () => {
       const content = await page.content();
