@@ -71,11 +71,12 @@ const AUTH_TOKEN = process.env.API_AUTH_TOKEN;
 
 async function fetchData(endpoint, params = {}) {
   try {
+    const startTime = Date.now();
     console.log(`Calling API: ${API_BASE}${endpoint} with params:`, params); // Debug log
     const response = await axios.get(`${API_BASE}${endpoint}`, {
       headers: { Authorization: AUTH_TOKEN },
       params,
-      timeout: 5000, // Giảm timeout xuống 5 giây để nhanh hơn
+      timeout: 5000, // 5 giây timeout
     });
     console.log(`API ${endpoint} responded successfully in ${Date.now() - startTime}ms`);
     return response.data;
