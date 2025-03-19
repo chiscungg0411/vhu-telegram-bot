@@ -7,13 +7,12 @@
     "start": "node bot.js"
   },
   "dependencies": {
-    "node-telegram-bot-api": "^0.64.0",
+    "dotenv": "^16.4.7",
     "express": "^4.19.2",
-    "axios": "^1.7.2",
-    "fs.promises": "^0.1.0",
-    "node-cache": "^5.1.2",
-    "axios-retry": "^4.0.0",
-    "dotenv": "^16.4.7"
+    "node-telegram-bot-api": "^0.64.0",
+    "puppeteer-core": "^22.0.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
   "author": "Chí Cường",
   "license": "MIT"
