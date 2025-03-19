@@ -121,17 +121,28 @@ async function getSchedule(weekOffset = 0) {
       waitUntil: "networkidle2",
       timeout: 60000,
     });
+    console.log(`🌐 URL sau khi vào trang chủ: ${page.url()}`);
+    const homeContent = await page.content();
+    console.log(`📄 Nội dung trang chủ: ${homeContent.slice(0, 500)}...`);
 
-    console.log("📅 Đang truy cập trang lịch học...");
-    await page.goto("https://portal.vhu.edu.vn/student/schedules", {
-      waitUntil: "networkidle2",
-      timeout: 60000,
-    });
-    console.log(`🌐 URL sau khi truy cập: ${page.url()}`);
+    // Tìm và nhấp vào menu "Lịch học"
+    const scheduleLink = await page.$("a[href='/student/schedules']");
+    if (scheduleLink) {
+      console.log("📅 Nhấp vào menu 'Lịch học'...");
+      await scheduleLink.click();
+      await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 60000 });
+    } else {
+      console.log("📅 Không tìm thấy menu, điều hướng trực tiếp đến lịch học...");
+      await page.goto("https://portal.vhu.edu.vn/student/schedules", {
+        waitUntil: "networkidle2",
+        timeout: 60000,
+      });
+    }
 
-    await page.waitForSelector("#psc-table-head", { timeout: 10000 }).catch(async () => {
+    console.log(`🌐 URL sau khi truy cập lịch học: ${page.url()}`);
+    await page.waitForSelector("#psc-table-head", { timeout: 20000 }).catch(async () => {
       const content = await page.content();
-      throw new Error(`Không tìm thấy #psc-table-head sau 10 giây. Nội dung trang: ${content.slice(0, 500)}...`);
+      throw new Error(`Không tìm thấy #psc-table-head sau 20 giây. Nội dung trang: ${content.slice(0, 500)}...`);
     });
     const scheduleContent = await page.content();
     console.log(`📄 Nội dung trang lịch học: ${scheduleContent.slice(0, 500)}...`);
@@ -211,17 +222,28 @@ async function getNotifications() {
       waitUntil: "networkidle2",
       timeout: 60000,
     });
+    console.log(`🌐 URL sau khi vào trang chủ: ${page.url()}`);
+    const homeContent = await page.content();
+    console.log(`📄 Nội dung trang chủ: ${homeContent.slice(0, 500)}...`);
 
-    console.log("🔔 Đang truy cập trang thông báo...");
-    await page.goto("https://portal.vhu.edu.vn/student/index", {
-      waitUntil: "networkidle2",
-      timeout: 60000,
-    });
-    console.log(`🌐 URL sau khi truy cập: ${page.url()}`);
+    // Tìm và nhấp vào menu "Thông báo" (giả định là trang chủ)
+    const notifLink = await page.$("a[href='/student/index']");
+    if (notifLink) {
+      console.log("🔔 Nhấp vào menu 'Thông báo'...");
+      await notifLink.click();
+      await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 60000 });
+    } else {
+      console.log("🔔 Không tìm thấy menu, điều hướng trực tiếp đến thông báo...");
+      await page.goto("https://portal.vhu.edu.vn/student/index", {
+        waitUntil: "networkidle2",
+        timeout: 60000,
+      });
+    }
 
-    await page.waitForSelector(".MuiTableBody-root", { timeout: 10000 }).catch(async () => {
+    console.log(`🌐 URL sau khi truy cập thông báo: ${page.url()}`);
+    await page.waitForSelector(".MuiTableBody-root", { timeout: 20000 }).catch(async () => {
       const content = await page.content();
-      throw new Error(`Không tìm thấy .MuiTableBody-root sau 10 giây. Nội dung trang: ${content.slice(0, 500)}...`);
+      throw new Error(`Không tìm thấy .MuiTableBody-root sau 20 giây. Nội dung trang: ${content.slice(0, 500)}...`);
     });
     const notifContent = await page.content();
     console.log(`📄 Nội dung trang thông báo: ${notifContent.slice(0, 500)}...`);
@@ -274,9 +296,9 @@ async function getSocialWork() {
     });
     console.log(`🌐 URL sau khi truy cập: ${page.url()}`);
 
-    await page.waitForSelector(".MuiTableBody-root", { timeout: 10000 }).catch(async () => {
+    await page.waitForSelector(".MuiTableBody-root", { timeout: 20000 }).catch(async () => {
       const content = await page.content();
-      throw new Error(`Không tìm thấy .MuiTableBody-root sau 10 giây. Nội dung trang: ${content.slice(0, 500)}...`);
+      throw new Error(`Không tìm thấy .MuiTableBody-root sau 20 giây. Nội dung trang: ${content.slice(0, 500)}...`);
     });
     const socialContent = await page.content();
     console.log(`📄 Nội dung trang công tác: ${socialContent.slice(0, 500)}...`);
