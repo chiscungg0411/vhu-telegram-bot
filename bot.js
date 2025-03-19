@@ -43,33 +43,45 @@ async function launchBrowser() {
   }
 }
 
-// Hàm đăng nhập vào portal
-async function login(page, username, password) {
-  try {
-    console.log("🔑 Đang truy cập trang đăng nhập...");
-    await page.goto("https://portal.vhu.edu.vn/login", {
-      waitUntil: "networkidle2", // Chờ mạng ổn định hơn
-      timeout: 60000, // 60 giây
-    });
-    console.log("✅ Trang đăng nhập đã tải.");
+// Hàm đăng nhập vào portal với retry
+async function login(page, username, password, retries = 3) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`🔑 Thử đăng nhập lần ${attempt}...`);
+      await page.goto("https://portal.vhu.edu.vn/login", {
+        waitUntil: "networkidle2",
+        timeout: 120000, // Tăng timeout lên 120 giây
+      });
+      console.log("✅ Trang đăng nhập đã tải.");
 
-    await page.waitForSelector("input[name='email']", { timeout: 30000 });
-    await page.type("input[name='email']", username, { delay: 50 });
-    await page.type("input[name='password']", password, { delay: 50 });
-    console.log("✍️ Đã nhập thông tin đăng nhập.");
+      await page.waitForSelector("input[name='email']", { timeout: 30000 });
+      await page.type("input[name='email']", username, { delay: 50 });
+      await page.type("input[name='password']", password, { delay: 50 });
+      console.log("✍️ Đã nhập thông tin đăng nhập.");
 
-    await Promise.all([
-      page.click("button[type='submit']"),
-      page.waitForNavigation({ waitUntil: "networkidle2", timeout: 60000 }),
-    ]);
+      // Thêm user-agent để tránh bị chặn
+      await page.setUserAgent(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+      );
 
-    if (page.url().includes("login")) {
-      throw new Error("Sai tài khoản hoặc mật khẩu!");
+      await Promise.all([
+        page.click("button[type='submit']"),
+        page.waitForNavigation({ waitUntil: "networkidle2", timeout: 120000 }),
+      ]);
+
+      // Kiểm tra xem đã đăng nhập thành công chưa
+      await page.waitForSelector("body", { timeout: 30000 }); // Đảm bảo trang đã tải
+      if (page.url().includes("login")) {
+        throw new Error("Sai tài khoản hoặc mật khẩu!");
+      }
+      console.log("✅ Đăng nhập thành công.");
+      return true;
+    } catch (error) {
+      console.error(`❌ Lỗi đăng nhập lần ${attempt}:`, error.message);
+      if (attempt === retries) throw error;
+      console.log("⏳ Thử lại sau 5 giây...");
+      await new Promise((resolve) => setTimeout(resolve, 5000));
     }
-    console.log("✅ Đăng nhập thành công.");
-  } catch (error) {
-    console.error("❌ Lỗi đăng nhập:", error.message);
-    throw error;
   }
 }
 
@@ -88,7 +100,7 @@ async function getSchedule(weekOffset = 0) {
     console.log("📅 Đang truy cập trang lịch học...");
     await page.goto("https://portal.vhu.edu.vn/student/schedules", {
       waitUntil: "networkidle2",
-      timeout: 60000,
+      timeout: 120000,
     });
 
     const scheduleData = await page.evaluate((offset) => {
@@ -115,7 +127,7 @@ async function getSchedule(weekOffset = 0) {
           });
           const weekInfo = document.querySelector(".MuiTabs-root .MuiTab-root.Mui-selected")?.textContent || "Không rõ";
           resolve({ schedule, week: weekInfo });
-        }, 2000); // Chờ 2 giây để dữ liệu tải
+        }, 2000);
       });
     }, weekOffset);
 
@@ -144,7 +156,7 @@ async function getNotifications() {
     console.log("🔔 Đang truy cập trang thông báo...");
     await page.goto("https://portal.vhu.edu.vn/student/notifications", {
       waitUntil: "networkidle2",
-      timeout: 60000,
+      timeout: 120000,
     });
 
     const notifications = await page.evaluate(() => {
@@ -185,7 +197,7 @@ async function getSocialWork() {
     console.log("📋 Đang truy cập trang công tác xã hội...");
     await page.goto("https://portal.vhu.edu.vn/student/socialworks", {
       waitUntil: "networkidle2",
-      timeout: 60000,
+      timeout: 120000,
     });
 
     const socialWork = await page.evaluate(() => {
@@ -222,7 +234,7 @@ app.get("/ping", (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server chạy trên port ${PORT}`);
-  bot.startPolling({ polling: { interval: 500 } }); // Polling với interval 500ms
+  bot.startPolling({ polling: { interval: 500 } });
   console.log("✅ Bot đang chạy ở chế độ polling...");
 });
 
