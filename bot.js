@@ -50,13 +50,13 @@ async function launchBrowser() {
 }
 
 // Hàm đăng nhập vào portal
-async function login(page, username, password, retries = 3) {
+async function login(page, username, password, retries = 5) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       console.log(`🔑 Thử đăng nhập lần ${attempt}...`);
       await page.goto("https://portal.vhu.edu.vn/login", {
         waitUntil: "networkidle2",
-        timeout: 300000,
+        timeout: 60000,
       });
       console.log("✅ Trang đăng nhập đã tải.");
 
@@ -73,8 +73,7 @@ async function login(page, username, password, retries = 3) {
       await page.click("button[type='submit']");
       console.log("⏳ Đang chờ phản hồi sau đăng nhập...");
 
-      // Chờ tối đa 60 giây để URL thay đổi
-      let timeout = 60000;
+      let timeout = 30000;
       let elapsed = 0;
       const interval = 1000;
       while (elapsed < timeout) {
@@ -89,10 +88,13 @@ async function login(page, username, password, retries = 3) {
 
       const finalUrl = page.url();
       if (finalUrl.includes("/login")) {
-        // Kiểm tra nội dung trang để xác định lỗi
-        const pageContent = await page.evaluate(() => document.body.innerText);
-        console.log(`📄 Nội dung trang khi lỗi: ${pageContent.substring(0, 200)}...`);
-        throw new Error("Đăng nhập thất bại: Vẫn ở trang login. Kiểm tra CAPTCHA, tài khoản/mật khẩu hoặc lỗi server.");
+        const errorMessage = await page.evaluate(() =>
+          document.body.innerText.includes("Username or password is incorrect")
+            ? "Sai tên đăng nhập hoặc mật khẩu."
+            : "Đăng nhập thất bại (có thể do CAPTCHA hoặc lỗi server)."
+        );
+        console.log(`📄 Lỗi cụ thể: ${errorMessage}`);
+        throw new Error(`Đăng nhập thất bại: ${errorMessage}`);
       }
 
       console.log("✅ Đăng nhập thành công.");
@@ -102,7 +104,9 @@ async function login(page, username, password, retries = 3) {
       console.log(`🌐 URL khi lỗi: ${page.url()}`);
       if (attempt === retries) throw new Error(`Đăng nhập thất bại sau ${retries} lần: ${error.message}`);
       console.log("⏳ Thử lại sau 5 giây...");
+      await page.close();
       await new Promise((resolve) => setTimeout(resolve, 5000));
+      page = await (await launchBrowser()).newPage();
     }
   }
 }
@@ -122,48 +126,51 @@ async function getSchedule(weekOffset = 0) {
     console.log("📅 Đang truy cập trang lịch học...");
     await page.goto("https://portal.vhu.edu.vn/student/schedules", {
       waitUntil: "networkidle2",
-      timeout: 300000,
+      timeout: 60000,
     });
 
-    const scheduleData = await page.evaluate((offset) => {
-      const weekTabs = document.querySelectorAll(".MuiTabs-root .MuiTab-root");
-      if (!weekTabs.length) throw new Error("Không tìm thấy tab tuần!");
-      const targetWeek = weekTabs[offset] || weekTabs[0];
-      targetWeek.click();
+    // Chọn tuần nếu cần (tuần hiện tại hoặc tuần sau)
+    const weekSelector = ".MuiTabs-root .MuiTab-root";
+    await page.waitForSelector(weekSelector, { timeout: 30000 });
+    const weekTabs = await page.$$(weekSelector);
+    const targetWeekIndex = weekOffset === 0 ? 0 : 1; // 0: tuần này, 1: tuần sau
+    if (weekTabs[targetWeekIndex]) {
+      await weekTabs[targetWeekIndex].click();
+      await new Promise((resolve) => setTimeout(resolve, 2000)); // Chờ load dữ liệu
+    }
 
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          const table = document.querySelector("#psc-table-head");
-          if (!table) throw new Error("Không tìm thấy bảng lịch học!");
-          
-          const headers = Array.from(table.querySelectorAll("thead th")).map(th => th.textContent.trim());
-          const days = headers.slice(1);
-          const schedule = {};
+    const scheduleData = await page.evaluate(() => {
+      const table = document.querySelector("#psc-table-head");
+      if (!table) throw new Error("Không tìm thấy bảng lịch học!");
 
-          days.forEach((day, dayIndex) => {
-            schedule[day] = [];
-            const cells = table.querySelectorAll(`tbody td:nth-child(${dayIndex + 2})`);
-            cells.forEach(cell => {
-              const detail = cell.querySelector(".DetailSchedule");
-              if (detail) {
-                const spans = detail.querySelectorAll("span");
-                schedule[day].push({
-                  room: spans[0]?.textContent.trim() || "Không rõ",
-                  subject: spans[1]?.textContent.trim() || "Không rõ",
-                  classCode: spans[2]?.textContent.replace("LHP: ", "").trim() || "Không rõ",
-                  periods: spans[4]?.textContent.replace("Tiết: ", "").trim() || "Không rõ",
-                  startTime: spans[5]?.textContent.replace("Giờ bắt đầu: ", "").trim() || "Không rõ",
-                  professor: spans[6]?.textContent.replace("GV: ", "").trim() || "Không rõ",
-                });
-              }
+      const headers = Array.from(table.querySelectorAll("thead th")).map((th) =>
+        th.textContent.trim()
+      );
+      const days = headers.slice(1); // Bỏ cột "Tiết"
+      const schedule = {};
+
+      days.forEach((day, dayIndex) => {
+        schedule[day] = [];
+        const cells = table.querySelectorAll(`tbody td:nth-child(${dayIndex + 2})`);
+        cells.forEach((cell) => {
+          const detail = cell.querySelector(".DetailSchedule");
+          if (detail) {
+            const spans = detail.querySelectorAll("span");
+            schedule[day].push({
+              room: spans[0]?.textContent.trim() || "Không rõ",
+              subject: spans[1]?.textContent.trim() || "Không rõ",
+              classCode: spans[2]?.textContent.replace("LHP: ", "").trim() || "Không rõ",
+              periods: spans[4]?.textContent.replace("Tiết: ", "").trim() || "Không rõ",
+              startTime: spans[5]?.textContent.replace("Giờ bắt đầu: ", "").trim() || "Không rõ",
+              professor: spans[6]?.textContent.replace("GV: ", "").trim() || "Không rõ",
             });
-          });
-
-          const weekInfo = targetWeek.textContent.trim() || "Không rõ";
-          resolve({ schedule, week: weekInfo });
-        }, 2000);
+          }
+        });
       });
-    }, weekOffset);
+
+      const weekInfo = document.querySelector(".MuiSelect-select")?.textContent.trim() || "Không rõ";
+      return { schedule, week: weekInfo };
+    });
 
     console.log("✅ Đã lấy lịch học.");
     await browser.close();
@@ -175,7 +182,7 @@ async function getSchedule(weekOffset = 0) {
   }
 }
 
-// Hàm lấy thông báo
+// Hàm lấy thông báo (Cập nhật mới)
 async function getNotifications() {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -190,13 +197,13 @@ async function getNotifications() {
     console.log("🔔 Đang truy cập trang thông báo...");
     await page.goto("https://portal.vhu.edu.vn/student/notifications", {
       waitUntil: "networkidle2",
-      timeout: 300000,
+      timeout: 60000,
     });
 
     const notifications = await page.evaluate(() => {
       const rows = document.querySelectorAll(".MuiTableBody-root tr");
       if (!rows.length) throw new Error("Không tìm thấy thông báo!");
-      return Array.from(rows).map(row => {
+      return Array.from(rows).map((row) => {
         const cols = row.querySelectorAll("td");
         return {
           MessageSubject: cols[0]?.querySelector("a")?.textContent.trim() || "Không rõ",
@@ -231,13 +238,13 @@ async function getSocialWork() {
     console.log("📋 Đang truy cập trang công tác xã hội...");
     await page.goto("https://portal.vhu.edu.vn/student/socialworks", {
       waitUntil: "networkidle2",
-      timeout: 300000,
+      timeout: 60000,
     });
 
     const socialWork = await page.evaluate(() => {
       const rows = document.querySelectorAll(".MuiTableBody-root tr");
       if (!rows.length) throw new Error("Không tìm thấy dữ liệu công tác xã hội!");
-      return Array.from(rows).map(row => {
+      return Array.from(rows).map((row) => {
         const cols = row.querySelectorAll("td");
         return {
           Index: cols[0]?.textContent.trim() || "Không rõ",
