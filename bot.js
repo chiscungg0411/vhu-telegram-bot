@@ -104,7 +104,7 @@ async function login(page, username, password, retries = 5) {
   }
 }
 
-// Hàm lấy lịch học
+// Hàm lấy lịch học (CẬP NHẬT)
 async function getSchedule(weekOffset = 0) {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -125,28 +125,21 @@ async function getSchedule(weekOffset = 0) {
     const scheduleContent = await page.content();
     console.log(`📄 Nội dung trang lịch học: ${scheduleContent.slice(0, 500)}...`);
 
-    await page.waitForSelector(".MuiTab-root", { timeout: 60000 }).catch(async () => {
-      const content = await page.content();
-      throw new Error(`Không tìm thấy .MuiTab-root. Nội dung trang: ${content.slice(0, 500)}...`);
-    });
-
-    const tabs = await page.$$(".MuiTab-root");
-    if (tabs.length > 0) {
-      await tabs[0].click(); // Chọn tab "TKB TUẦN"
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-    } else {
-      throw new Error("Không tìm thấy tab nào!");
-    }
-
+    // Kiểm tra và chọn tuần (nếu cần)
     const weekButtons = await page.$$(".MuiButton-containedPrimary");
-    if (weekOffset === 1 && weekButtons[2]) {
-      await weekButtons[2].click(); // Nút "SkipNext"
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-    } else if (weekButtons[1]) {
-      await weekButtons[1].click(); // Nút "Hiện tại"
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+    if (weekButtons.length > 0) {
+      if (weekOffset === 1 && weekButtons[2]) {
+        await weekButtons[2].click(); // Nút "SkipNext"
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+      } else if (weekButtons[1]) {
+        await weekButtons[1].click(); // Nút "Hiện tại"
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+      }
+    } else {
+      console.log("⚠️ Không tìm thấy nút chọn tuần, dùng tuần mặc định.");
     }
 
+    // Lấy dữ liệu lịch học
     const scheduleData = await page.evaluate(() => {
       const table = document.querySelector("#psc-table-head");
       if (!table) throw new Error("Không tìm thấy bảng lịch học!");
@@ -154,7 +147,7 @@ async function getSchedule(weekOffset = 0) {
       const headers = Array.from(table.querySelectorAll("thead th")).map((th) =>
         th.textContent.trim()
       );
-      const days = headers.slice(1);
+      const days = headers.slice(1); // Bỏ cột "Tiết"
       const schedule = {};
 
       days.forEach((day, dayIndex) => {
@@ -176,7 +169,8 @@ async function getSchedule(weekOffset = 0) {
         });
       });
 
-      const weekInfo = document.querySelector(".MuiSelect-select")?.textContent.trim() || "Không rõ";
+      // Lấy thông tin tuần (nếu có)
+      const weekInfo = document.querySelector(".MuiSelect-select")?.textContent.trim() || days[0].split("\n")[1] + " - " + days[days.length - 1].split("\n")[1];
       return { schedule, week: weekInfo };
     });
 
