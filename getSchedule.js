@@ -1,3 +1,91 @@
+const puppeteer = require("puppeteer-core");
+const StealthPlugin = require("puppeteer-extra-plugin-stealth");
+const puppeteerExtra = require("puppeteer-extra");
+
+puppeteerExtra.use(StealthPlugin());
+
+async function launchBrowser() {
+  try {
+    const browser = await puppeteerExtra.launch({
+      executablePath: process.env.CHROME_PATH || "/usr/bin/google-chrome-stable",
+      headless: "new",
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--disable-extensions",
+        "--disable-background-networking",
+        "--no-zygote",
+        "--single-process",
+        "--disable-accelerated-2d-canvas",
+        "--disable-features=site-per-process",
+      ],
+      defaultViewport: { width: 1280, height: 720 },
+      timeout: 60000,
+    });
+    console.log("✅ Trình duyệt Puppeteer đã khởi động.");
+    return browser;
+  } catch (error) {
+    console.error("❌ Lỗi khởi động trình duyệt:", error.message);
+    throw new Error("Không thể khởi động trình duyệt.");
+  }
+}
+
+async function login(page, username, password, retries = 5) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`🔑 Thử đăng nhập lần ${attempt}...`);
+      await page.goto("https://portal.vhu.edu.vn/login", {
+        waitUntil: "networkidle2",
+        timeout: 60000,
+      });
+      console.log("✅ Trang đăng nhập đã tải.");
+
+      await page.waitForSelector("input[name='email']", { timeout: 60000 });
+      await page.type("input[name='email']", username, { delay: 50 });
+      await page.type("input[name='password']", password, { delay: 50 });
+      console.log("✍️ Đã nhập thông tin đăng nhập.");
+
+      await page.setUserAgent(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+      );
+
+      await page.waitForSelector("button[type='submit']", { timeout: 60000 });
+      await page.click("button[type='submit']");
+      console.log("⏳ Đang chờ phản hồi sau đăng nhập...");
+
+      await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 60000 });
+      const finalUrl = page.url();
+      console.log(`🌐 URL sau đăng nhập: ${finalUrl}`);
+
+      if (finalUrl.includes("/login")) {
+        const content = await page.content();
+        console.log(`📄 Nội dung trang sau đăng nhập thất bại: ${content.slice(0, 500)}...`);
+        const errorMessage = await page.evaluate(() =>
+          document.body.innerText.includes("Username or password is incorrect")
+            ? "Sai tên đăng nhập hoặc mật khẩu."
+            : "Đăng nhập thất bại (có thể do CAPTCHA hoặc lỗi server)."
+        );
+        throw new Error(`Đăng nhập thất bại: ${errorMessage}`);
+      }
+
+      console.log("✅ Đăng nhập thành công:", finalUrl);
+      return true;
+    } catch (error) {
+      console.error(`❌ Lỗi đăng nhập lần ${attempt}:`, error.message);
+      console.log(`🌐 URL khi lỗi: ${page.url()}`);
+      const pageContent = await page.content();
+      console.log(`📄 Nội dung trang khi lỗi: ${pageContent.slice(0, 500)}...`);
+      if (attempt === retries) throw new Error(`Đăng nhập thất bại sau ${retries} lần: ${error.message}`);
+      console.log("⏳ Thử lại sau 5 giây...");
+      await page.close();
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      page = await (await launchBrowser()).newPage();
+    }
+  }
+}
+
 async function getSchedule(weekOffset = 0) {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -88,3 +176,5 @@ async function getSchedule(weekOffset = 0) {
     throw error;
   }
 }
+
+module.exports = { getSchedule };
