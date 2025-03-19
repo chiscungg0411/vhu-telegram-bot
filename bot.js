@@ -104,7 +104,7 @@ async function login(page, username, password, retries = 5) {
   }
 }
 
-// Hàm lấy lịch học (CẬP NHẬT)
+// Hàm lấy lịch học
 async function getSchedule(weekOffset = 0) {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -125,7 +125,6 @@ async function getSchedule(weekOffset = 0) {
     const scheduleContent = await page.content();
     console.log(`📄 Nội dung trang lịch học: ${scheduleContent.slice(0, 500)}...`);
 
-    // Kiểm tra và chọn tuần (nếu cần)
     const weekButtons = await page.$$(".MuiButton-containedPrimary");
     if (weekButtons.length > 0) {
       if (weekOffset === 1 && weekButtons[2]) {
@@ -139,7 +138,6 @@ async function getSchedule(weekOffset = 0) {
       console.log("⚠️ Không tìm thấy nút chọn tuần, dùng tuần mặc định.");
     }
 
-    // Lấy dữ liệu lịch học
     const scheduleData = await page.evaluate(() => {
       const table = document.querySelector("#psc-table-head");
       if (!table) throw new Error("Không tìm thấy bảng lịch học!");
@@ -147,7 +145,7 @@ async function getSchedule(weekOffset = 0) {
       const headers = Array.from(table.querySelectorAll("thead th")).map((th) =>
         th.textContent.trim()
       );
-      const days = headers.slice(1); // Bỏ cột "Tiết"
+      const days = headers.slice(1);
       const schedule = {};
 
       days.forEach((day, dayIndex) => {
@@ -169,7 +167,6 @@ async function getSchedule(weekOffset = 0) {
         });
       });
 
-      // Lấy thông tin tuần (nếu có)
       const weekInfo = document.querySelector(".MuiSelect-select")?.textContent.trim() || days[0].split("\n")[1] + " - " + days[days.length - 1].split("\n")[1];
       return { schedule, week: weekInfo };
     });
@@ -184,7 +181,7 @@ async function getSchedule(weekOffset = 0) {
   }
 }
 
-// Hàm lấy thông báo
+// Hàm lấy thông báo (CẬP NHẬT)
 async function getNotifications() {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -233,7 +230,7 @@ async function getNotifications() {
   }
 }
 
-// Hàm lấy công tác xã hội
+// Hàm lấy công tác xã hội (CẬP NHẬT)
 async function getSocialWork() {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -266,7 +263,7 @@ async function getSocialWork() {
         const cols = row.querySelectorAll("td");
         return {
           Index: cols[0]?.textContent.trim() || "Không rõ",
-          Details: cols[1]?.textContent.trim() || "Không rõ",
+          Event: cols[1]?.textContent.trim() || "Không rõ",
           Location: cols[2]?.textContent.trim() || "Không rõ",
           NumRegistered: cols[3]?.textContent.trim() || "Không rõ",
           Points: cols[4]?.textContent.trim() || "0",
@@ -377,7 +374,7 @@ bot.onText(/\/congtac/, async (msg) => {
     const congTacData = await getSocialWork();
     let message = "📋 *Công tác xã hội:*\n*------------------------------------*\n";
     congTacData.slice(0, 5).forEach((c, i) => {
-      message += `📌 *${c.Index}. ${c.Details}*\n📍 ${c.Location || "Chưa cập nhật"}\n👥 ${c.NumRegistered} người đăng ký\n⭐ ${c.Points} điểm\n🕛 ${c.StartTime} - ${c.EndTime}\n\n`;
+      message += `📌 *${c.Index}. ${c.Event}*\n📍 ${c.Location || "Chưa cập nhật"}\n👥 ${c.NumRegistered} người đăng ký\n⭐ ${c.Points} điểm\n🕛 ${c.StartTime} - ${c.EndTime}\n\n`;
     });
     if (congTacData.length > 5) message += `📢 Còn ${congTacData.length - 5} công tác khác.`;
     bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
