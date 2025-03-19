@@ -56,7 +56,7 @@ async function login(page, username, password, retries = 3) {
       console.log(`🔑 Thử đăng nhập lần ${attempt}...`);
       await page.goto("https://portal.vhu.edu.vn/login", {
         waitUntil: "networkidle2",
-        timeout: 300000, // 5 phút
+        timeout: 300000,
       });
       console.log("✅ Trang đăng nhập đã tải.");
 
@@ -71,19 +71,30 @@ async function login(page, username, password, retries = 3) {
 
       await page.waitForSelector("button[type='submit']", { timeout: 30000 });
       await page.click("button[type='submit']");
-      console.log("⏳ Đang chờ chuyển hướng sau đăng nhập...");
+      console.log("⏳ Đang chờ phản hồi sau đăng nhập...");
 
-      // Chờ URL thay đổi hoặc một phần tử đặc trưng sau đăng nhập
-      await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 300000 });
-      const currentUrl = page.url();
-      console.log(`🌐 URL hiện tại: ${currentUrl}`);
-
-      if (currentUrl.includes("/login")) {
-        throw new Error("Đăng nhập thất bại: Vẫn ở trang login, kiểm tra tài khoản/mật khẩu hoặc CAPTCHA.");
+      // Chờ tối đa 60 giây để URL thay đổi
+      let timeout = 60000;
+      let elapsed = 0;
+      const interval = 1000;
+      while (elapsed < timeout) {
+        const currentUrl = page.url();
+        if (!currentUrl.includes("/login")) {
+          console.log(`✅ Đã chuyển hướng đến: ${currentUrl}`);
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, interval));
+        elapsed += interval;
       }
 
-      // Kiểm tra một phần tử đặc trưng sau đăng nhập (thay thế nếu cần)
-      await page.waitForSelector("body", { timeout: 30000 }); // Thay bằng selector thật nếu có
+      const finalUrl = page.url();
+      if (finalUrl.includes("/login")) {
+        // Kiểm tra nội dung trang để xác định lỗi
+        const pageContent = await page.evaluate(() => document.body.innerText);
+        console.log(`📄 Nội dung trang khi lỗi: ${pageContent.substring(0, 200)}...`);
+        throw new Error("Đăng nhập thất bại: Vẫn ở trang login. Kiểm tra CAPTCHA, tài khoản/mật khẩu hoặc lỗi server.");
+      }
+
       console.log("✅ Đăng nhập thành công.");
       return true;
     } catch (error) {
