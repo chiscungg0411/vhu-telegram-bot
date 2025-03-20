@@ -294,7 +294,7 @@ async function getSocialWork() {
     console.log(`🌐 URL sau khi truy cập: ${page.url()}`);
 
     await page.waitForFunction(
-      () => document.querySelector(".MuiTableBody-root") personally!== null,
+      () => document.querySelector(".MuiTableBody-root") !== null,
       { timeout: 60000 }
     ).catch(async () => {
       const content = await page.content();
