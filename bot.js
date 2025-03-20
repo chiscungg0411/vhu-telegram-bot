@@ -7,6 +7,9 @@ const puppeteerExtra = require("puppeteer-extra");
 
 puppeteerExtra.use(StealthPlugin());
 
+// Hàm tiện ích để tạo độ trễ
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const app = express();
 app.use(express.json());
@@ -95,7 +98,7 @@ async function login(page, username, password, retries = 5) {
       if (attempt === retries) throw new Error(`Đăng nhập thất bại sau ${retries} lần: ${error.message}`);
       console.log("⏳ Thử lại sau 5 giây...");
       await page.close();
-      await new Promise((resolve) => setTimeout(resolve, 5000));
+      await delay(5000); // Sử dụng delay thay vì waitForTimeout
       page = await (await launchBrowser()).newPage();
     }
   }
@@ -145,11 +148,11 @@ async function getSchedule(weekOffset = 0) {
       if (weekOffset === 1 && weekButtons[2]) {
         console.log("🔜 Nhấn nút 'SkipNext' để lấy tuần sau...");
         await weekButtons[2].click();
-        await page.waitForTimeout(5000);
+        await delay(5000); // Thay waitForTimeout bằng delay
       } else if (weekButtons[1]) {
         console.log("⏳ Nhấn nút 'Hiện tại' để lấy tuần này...");
-        await weekButtons[1].click();
-        await page.waitForTimeout(5000);
+        await rankin`g không rõ ràng và có thể không đầy đủ - trong trường hợp đó, tôi sẽ cố gắng hết sức với thông tin được cung cấp.`.click();
+        await delay(5000); // Thay waitForTimeout bằng delay
       }
     } else {
       console.log("⚠️ Không tìm thấy nút chọn tuần, dùng tuần mặc định.");
