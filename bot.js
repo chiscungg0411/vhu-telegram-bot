@@ -104,7 +104,7 @@ async function login(page, username, password, retries = 5) {
   }
 }
 
-// Hàm lấy lịch học
+// Hàm lấy lịch học (sửa lại để lấy tuần và định dạng đúng)
 async function getSchedule() {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -154,17 +154,19 @@ async function getSchedule() {
 
       days.forEach((day, dayIndex) => {
         const [dayName, date] = day.split("\n"); // Tách "Thứ 2" và "17/03/2025"
-        const formattedDay = `${dayName} (${date})`;
+        const formattedDay = `${dayName} (${date.trim()})`; // Đảm bảo không có khoảng trắng thừa
         schedule[formattedDay] = [];
         const cells = table.querySelectorAll(`tbody td:nth-child(${dayIndex + 2})`);
         cells.forEach((cell) => {
           const detail = cell.querySelector(".DetailSchedule");
           if (detail) {
             const spans = detail.querySelectorAll("span");
+            const subjectFull = spans[1]?.textContent.trim() || "Không rõ";
+            const subjectMatch = subjectFull.match(/(.*) \((.*)\)/); // Tách tên và mã lớp
             schedule[formattedDay].push({
               room: spans[0]?.textContent.trim() || "Không rõ",
-              subject: spans[1]?.textContent.trim() || "Không rõ",
-              classCode: spans[2]?.textContent.replace("LHP: ", "").trim() || "Không rõ",
+              subject: subjectMatch ? subjectMatch[1] : subjectFull,
+              classCode: subjectMatch ? subjectMatch[2] : "Không rõ",
               periods: spans[4]?.textContent.replace("Tiết: ", "").trim() || "Không rõ",
               startTime: spans[5]?.textContent.replace("Giờ bắt đầu: ", "").trim() || "Không rõ",
               professor: spans[6]?.textContent.replace("GV: ", "").trim() || "Không rõ",
@@ -174,7 +176,7 @@ async function getSchedule() {
         });
       });
 
-      const weekInfo = `${days[0].split("\n")[1]} - ${days[days.length - 1].split("\n")[1]}`;
+      const weekInfo = `${days[0].split("\n")[1].trim()} - ${days[days.length - 1].split("\n")[1].trim()}`;
       return { schedule, week: weekInfo };
     });
 
@@ -351,8 +353,8 @@ bot.onText(/\/tuannay/, async (msg) => {
       message += `📌 **${ngay}:**\n`;
       if (monHocs.length) {
         monHocs.forEach((m) => {
-          message += `📖 **${m.subject.split(" (")[0]} – ${m.classCode.split("242")[1].substring(0, 7)}**\n` +
-                     `     (Tiết ${m.periods}, Giờ bắt đầu: ${m.startTime} – Phòng học: ${m.room}, GV: ${m.professor}, Email: ${m.email || "Chưa có"})\n`;
+          message += `📖 **${m.subject} – ${m.classCode}**\n` +
+                     `     (Tiết ${m.periods}, Giờ bắt đầu: ${m.startTime} – Phòng học: ${m.room}, GV: ${m.professor}, Email: ${m.email})\n`;
         });
       } else {
         message += "❌ Không có lịch\n";
