@@ -104,7 +104,7 @@ async function login(page, username, password, retries = 5) {
   }
 }
 
-// Hàm lấy lịch học (sửa để lấy tuần từ dropdown và tách ngày đúng)
+// Hàm lấy lịch học (sửa để tách ngày đúng và thay đổi tiêu đề tuần)
 async function getSchedule() {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -147,15 +147,16 @@ async function getSchedule() {
       if (!table) throw new Error("Không tìm thấy bảng lịch học!");
 
       const headers = Array.from(table.querySelectorAll("thead th")).map((th) =>
-        th.textContent.trim()
+        th.textContent.trim().replace(/\s+/g, " ") // Chuẩn hóa khoảng trắng
       );
       const days = headers.slice(1); // Bỏ cột "Tiết"
       const schedule = {};
 
       days.forEach((day, dayIndex) => {
-        const dayText = day.replace(/\s+/g, " "); // Chuẩn hóa khoảng trắng
-        const [dayName, date] = dayText.split(" "); // Tách "Thứ 2" và "17/03/2025"
-        const formattedDay = `${dayName} (${date || "Không rõ"})`;
+        const dayParts = day.match(/^(Thứ \d|Chủ nhật) (\d{2}\/\d{2}\/\d{4})$/); // Tách "Thứ X" và "dd/mm/yyyy"
+        const dayName = dayParts ? dayParts[1] : "Không rõ";
+        const date = dayParts ? dayParts[2] : "Không rõ";
+        const formattedDay = `${dayName} (${date})`;
         schedule[formattedDay] = [];
         const cells = table.querySelectorAll(`tbody td:nth-child(${dayIndex + 2})`);
         cells.forEach((cell) => {
@@ -177,9 +178,8 @@ async function getSchedule() {
         });
       });
 
-      // Lấy tuần từ dropdown
-      const weekElement = document.querySelector('div[aria-labelledby="demo-simple-select-helper-label"][name="Tuan"]');
-      const weekInfo = weekElement ? weekElement.textContent.trim() : "Không xác định";
+      // Tiêu đề tuần cố định theo yêu cầu
+      const weekInfo = "này của bạn";
 
       return { schedule, week: weekInfo };
     });
@@ -354,16 +354,16 @@ bot.onText(/\/tuannay/, async (msg) => {
   bot.sendMessage(chatId, "📅 Đang lấy lịch học tuần này, vui lòng chờ...");
   try {
     const lichHoc = await getSchedule();
-    let message = `📅 **Lịch học tuần ${lichHoc.week}**\n------------------------------------\n`;
+    let message = `📅 **Lịch học tuần này của bạn:**\n------------------------------------\n`;
     for (const [ngay, monHocs] of Object.entries(lichHoc.schedule)) {
       message += `📌 **${ngay}:**\n`;
       if (monHocs.length) {
         monHocs.forEach((m) => {
           message += `📖 **${m.subject} – ${m.classCode}**\n` +
-                     `     (Tiết ${m.periods}, Giờ bắt đầu: ${m.startTime} – Phòng học: ${m.room}, GV: ${m.professor}, Email: ${m.email})\n`;
+                     `     (Tiết: ${m.periods}, Giờ bắt đầu: ${m.startTime} – Phòng học: ${m.room}, GV: ${m.professor}, Email: ${m.email})\n`;
         });
       } else {
-        message += "❌ Không có lịch\n";
+        message += "❌ Không có lịch học\n";
       }
       message += "\n";
     }
