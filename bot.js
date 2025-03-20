@@ -104,7 +104,7 @@ async function login(page, username, password, retries = 5) {
   }
 }
 
-// Hàm lấy lịch học (sửa lại để lấy tuần và định dạng đúng)
+// Hàm lấy lịch học (sửa lại để tránh lỗi undefined)
 async function getSchedule() {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -153,8 +153,10 @@ async function getSchedule() {
       const schedule = {};
 
       days.forEach((day, dayIndex) => {
-        const [dayName, date] = day.split("\n"); // Tách "Thứ 2" và "17/03/2025"
-        const formattedDay = `${dayName} (${date.trim()})`; // Đảm bảo không có khoảng trắng thừa
+        const parts = day.split("\n"); // Tách "Thứ 2" và "17/03/2025"
+        const dayName = parts[0] || "Không rõ"; // Đảm bảo có giá trị mặc định
+        const date = parts[1] ? parts[1].trim() : "Không rõ";
+        const formattedDay = `${dayName} (${date})`;
         schedule[formattedDay] = [];
         const cells = table.querySelectorAll(`tbody td:nth-child(${dayIndex + 2})`);
         cells.forEach((cell) => {
@@ -176,7 +178,14 @@ async function getSchedule() {
         });
       });
 
-      const weekInfo = `${days[0].split("\n")[1].trim()} - ${days[days.length - 1].split("\n")[1].trim()}`;
+      // Kiểm tra và lấy weekInfo an toàn
+      let weekInfo = "Không xác định";
+      if (days.length > 0) {
+        const firstDay = days[0].split("\n")[1] || "Không rõ";
+        const lastDay = days[days.length - 1].split("\n")[1] || "Không rõ";
+        weekInfo = `${firstDay.trim()} - ${lastDay.trim()}`;
+      }
+
       return { schedule, week: weekInfo };
     });
 
