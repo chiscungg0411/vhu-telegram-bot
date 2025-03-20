@@ -106,11 +106,12 @@ async function getSchedule(weekOffset = 0) {
   const browser = await launchBrowser();
   const page = await browser.newPage();
   try {
-    await page.setRequestInterception(true);
-    page.on("request", (req) => {
-      if (["image", "stylesheet", "font"].includes(req.resourceType())) req.abort();
-      else req.continue();
-    });
+    // Tạm thời bỏ chặn tài nguyên để kiểm tra
+    // await page.setRequestInterception(true);
+    // page.on("request", (req) => {
+    //   if (["image", "stylesheet", "font"].includes(req.resourceType())) req.abort();
+    //   else req.continue();
+    // });
 
     await login(page, process.env.VHU_EMAIL, process.env.VHU_PASSWORD);
     console.log("🏠 Điều hướng đến trang chủ sinh viên...");
@@ -130,10 +131,22 @@ async function getSchedule(weekOffset = 0) {
     console.log(`🌐 URL sau khi truy cập lịch học: ${page.url()}`);
 
     // Chờ động cho đến khi bảng xuất hiện hoặc timeout
+    console.log("⏳ Đang chờ bảng lịch học tải...");
     await page.waitForFunction(
       () => document.querySelector("#psc-table-head") !== null,
       { timeout: 60000 }
-    );
+    ).catch(async () => {
+      const content = await page.content();
+      console.log(`❌ Không tìm thấy #psc-table-head. Nội dung trang: ${content.slice(0, 1000)}...`);
+      if (content.includes("captcha") || content.includes("verify")) {
+        throw new Error("Trang yêu cầu CAPTCHA, không thể tự động xử lý.");
+      } else if (content.includes("login")) {
+        throw new Error("Phiên đăng nhập thất bại, bị đưa về trang login.");
+      } else {
+        throw new Error("Không tìm thấy bảng lịch học, có thể giao diện đã thay đổi.");
+      }
+    });
+
     const scheduleContent = await page.content();
     console.log(`📄 Nội dung trang lịch học: ${scheduleContent.slice(0, 500)}...`);
 
@@ -181,7 +194,8 @@ async function getSchedule(weekOffset = 0) {
         });
       });
 
-      const weekInfo = document.querySelector(".MuiSelect-select")?.textContent.trim() || days[0].split("\n")[1] + " - " + days[days.length - 1].split("\n")[1];
+      const weekInfo = document.querySelector(".MuiSelect-select")?.textContent.trim() || 
+        days[0].split("\n")[1] + " - " + days[days.length - 1].split("\n")[1];
       return { schedule, week: weekInfo };
     });
 
@@ -223,13 +237,13 @@ async function getNotifications() {
     });
     console.log(`🌐 URL sau khi truy cập thông báo: ${page.url()}`);
 
-    // Chờ động cho đến khi bảng xuất hiện hoặc timeout
     await page.waitForFunction(
       () => document.querySelector(".MuiTableBody-root") !== null,
       { timeout: 60000 }
-    );
-    const notifContent = await page.content();
-    console.log(`📄 Nội dung trang thông báo: ${notifContent.slice(0, 500)}...`);
+    ).catch(async () => {
+      const content = await page.content();
+      throw new Error(`Không tìm thấy bảng thông báo: ${content.slice(0, 500)}...`);
+    });
 
     const notifications = await page.evaluate(() => {
       const rows = document.querySelectorAll(".MuiTableBody-root tr");
@@ -280,11 +294,12 @@ async function getSocialWork() {
     console.log(`🌐 URL sau khi truy cập: ${page.url()}`);
 
     await page.waitForFunction(
-      () => document.querySelector(".MuiTableBody-root") !== null,
+      () => document.querySelector(".MuiTableBody-root") personally!== null,
       { timeout: 60000 }
-    );
-    const socialContent = await page.content();
-    console.log(`📄 Nội dung trang công tác: ${socialContent.slice(0, 500)}...`);
+    ).catch(async () => {
+      const content = await page.content();
+      throw new Error(`Không tìm thấy bảng công tác xã hội: ${content.slice(0, 500)}...`);
+    });
 
     const socialWork = await page.evaluate(() => {
       const rows = document.querySelectorAll(".MuiTableBody-root tr");
