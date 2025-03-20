@@ -10,7 +10,7 @@ puppeteerExtra.use(StealthPlugin());
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const app = express();
 app.use(express.json());
-const bot = new TelegramBot(TOKEN, { polling: { interval: 1000, autoStart: false } }); // Tắt autoStart để kiểm soát thủ công
+const bot = new TelegramBot(TOKEN, { polling: { interval: 1000, autoStart: false } });
 
 // Xử lý lỗi hệ thống
 process.on("unhandledRejection", (reason, promise) => {
@@ -51,7 +51,7 @@ async function login(page, username, password, retries = 5) {
     try {
       console.log(`🔑 Thử đăng nhập lần ${attempt}...`);
       await page.goto("https://portal.vhu.edu.vn/login", {
-        waitUntil: "networkidle0", // Chờ tất cả request hoàn tất
+        waitUntil: "networkidle0",
         timeout: 120000,
       });
       console.log("✅ Trang đăng nhập đã tải.");
@@ -106,13 +106,6 @@ async function getSchedule(weekOffset = 0) {
   const browser = await launchBrowser();
   const page = await browser.newPage();
   try {
-    // Tạm thời bỏ chặn tài nguyên để kiểm tra
-    // await page.setRequestInterception(true);
-    // page.on("request", (req) => {
-    //   if (["image", "stylesheet", "font"].includes(req.resourceType())) req.abort();
-    //   else req.continue();
-    // });
-
     await login(page, process.env.VHU_EMAIL, process.env.VHU_PASSWORD);
     console.log("🏠 Điều hướng đến trang chủ sinh viên...");
     await page.goto("https://portal.vhu.edu.vn/student", {
@@ -130,12 +123,9 @@ async function getSchedule(weekOffset = 0) {
     });
     console.log(`🌐 URL sau khi truy cập lịch học: ${page.url()}`);
 
-    // Chờ động cho đến khi bảng xuất hiện hoặc timeout
+    // Chờ bảng lịch học với thời gian dài hơn
     console.log("⏳ Đang chờ bảng lịch học tải...");
-    await page.waitForFunction(
-      () => document.querySelector("#psc-table-head") !== null,
-      { timeout: 60000 }
-    ).catch(async () => {
+    await page.waitForSelector("#psc-table-head", { timeout: 120000 }).catch(async () => {
       const content = await page.content();
       console.log(`❌ Không tìm thấy #psc-table-head. Nội dung trang: ${content.slice(0, 1000)}...`);
       if (content.includes("captcha") || content.includes("verify")) {
@@ -143,7 +133,7 @@ async function getSchedule(weekOffset = 0) {
       } else if (content.includes("login")) {
         throw new Error("Phiên đăng nhập thất bại, bị đưa về trang login.");
       } else {
-        throw new Error("Không tìm thấy bảng lịch học, có thể giao diện đã thay đổi.");
+        throw new Error("Không tìm thấy bảng lịch học, có thể giao diện đã thay đổi hoặc trang chưa tải xong.");
       }
     });
 
@@ -172,7 +162,7 @@ async function getSchedule(weekOffset = 0) {
       const headers = Array.from(table.querySelectorAll("thead th")).map((th) =>
         th.textContent.trim()
       );
-      const days = headers.slice(1);
+      const days = headers.slice(1); // Bỏ cột "Tiết"
       const schedule = {};
 
       days.forEach((day, dayIndex) => {
@@ -214,12 +204,6 @@ async function getNotifications() {
   const browser = await launchBrowser();
   const page = await browser.newPage();
   try {
-    await page.setRequestInterception(true);
-    page.on("request", (req) => {
-      if (["image", "stylesheet", "font"].includes(req.resourceType())) req.abort();
-      else req.continue();
-    });
-
     await login(page, process.env.VHU_EMAIL, process.env.VHU_PASSWORD);
     console.log("🏠 Điều hướng đến trang chủ sinh viên...");
     await page.goto("https://portal.vhu.edu.vn/student", {
@@ -237,12 +221,18 @@ async function getNotifications() {
     });
     console.log(`🌐 URL sau khi truy cập thông báo: ${page.url()}`);
 
-    await page.waitForFunction(
-      () => document.querySelector(".MuiTableBody-root") !== null,
-      { timeout: 60000 }
-    ).catch(async () => {
+    // Chờ bảng thông báo với thời gian dài hơn
+    console.log("⏳ Đang chờ bảng thông báo tải...");
+    await page.waitForSelector(".MuiTableBody-root", { timeout: 120000 }).catch(async () => {
       const content = await page.content();
-      throw new Error(`Không tìm thấy bảng thông báo: ${content.slice(0, 500)}...`);
+      console.log(`❌ Không tìm thấy .MuiTableBody-root. Nội dung trang: ${content.slice(0, 1000)}...`);
+      if (content.includes("captcha") || content.includes("verify")) {
+        throw new Error("Trang yêu cầu CAPTCHA, không thể tự động xử lý.");
+      } else if (content.includes("login")) {
+        throw new Error("Phiên đăng nhập thất bại, bị đưa về trang login.");
+      } else {
+        throw new Error("Không tìm thấy bảng thông báo, có thể giao diện đã thay đổi hoặc trang chưa tải xong.");
+      }
     });
 
     const notifications = await page.evaluate(() => {
@@ -268,7 +258,7 @@ async function getNotifications() {
   }
 }
 
-// Hàm lấy công tác xã hội
+// Hàm lấy công tác xã hội (giữ nguyên vì đã hoạt động)
 async function getSocialWork() {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -337,7 +327,7 @@ app.get("/ping", (req, res) => {
 app.listen(PORT, async () => {
   console.log(`Server chạy trên port ${PORT}`);
   try {
-    await bot.stopPolling(); // Dừng polling cũ nếu có
+    await bot.stopPolling();
     await bot.startPolling({ polling: { interval: 1000 } });
     console.log("✅ Bot đang chạy ở chế độ polling...");
   } catch (error) {
