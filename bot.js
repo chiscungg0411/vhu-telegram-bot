@@ -98,14 +98,14 @@ async function login(page, username, password, retries = 5) {
       if (attempt === retries) throw new Error(`Đăng nhập thất bại sau ${retries} lần: ${error.message}`);
       console.log("⏳ Thử lại sau 5 giây...");
       await page.close();
-      await delay(5000); // Sử dụng delay thay vì waitForTimeout
+      await delay(5000);
       page = await (await launchBrowser()).newPage();
     }
   }
 }
 
-// Hàm lấy lịch học
-async function getSchedule(weekOffset = 0) {
+// Hàm lấy lịch học (đã loại bỏ nút chọn tuần)
+async function getSchedule() {
   const browser = await launchBrowser();
   const page = await browser.newPage();
   try {
@@ -126,7 +126,6 @@ async function getSchedule(weekOffset = 0) {
     });
     console.log(`🌐 URL sau khi truy cập lịch học: ${page.url()}`);
 
-    // Chờ bảng lịch học với thời gian dài hơn
     console.log("⏳ Đang chờ bảng lịch học tải...");
     await page.waitForSelector("#psc-table-head", { timeout: 120000 }).catch(async () => {
       const content = await page.content();
@@ -142,21 +141,6 @@ async function getSchedule(weekOffset = 0) {
 
     const scheduleContent = await page.content();
     console.log(`📄 Nội dung trang lịch học: ${scheduleContent.slice(0, 500)}...`);
-
-    const weekButtons = await page.$$(".MuiButton-containedPrimary");
-    if (weekButtons.length > 0) {
-      if (weekOffset === 1 && weekButtons[2]) {
-        console.log("🔜 Nhấn nút 'SkipNext' để lấy tuần sau...");
-        await weekButtons[2].click();
-        await delay(5000); // Thay waitForTimeout bằng delay
-      } else if (weekButtons[1]) {
-        console.log("⏳ Nhấn nút 'Hiện tại' để lấy tuần này...");
-        await rankin`g không rõ ràng và có thể không đầy đủ - trong trường hợp đó, tôi sẽ cố gắng hết sức với thông tin được cung cấp.`.click();
-        await delay(5000); // Thay waitForTimeout bằng delay
-      }
-    } else {
-      console.log("⚠️ Không tìm thấy nút chọn tuần, dùng tuần mặc định.");
-    }
 
     const scheduleData = await page.evaluate(() => {
       const table = document.querySelector("#psc-table-head");
@@ -187,8 +171,7 @@ async function getSchedule(weekOffset = 0) {
         });
       });
 
-      const weekInfo = document.querySelector(".MuiSelect-select")?.textContent.trim() || 
-        days[0].split("\n")[1] + " - " + days[days.length - 1].split("\n")[1];
+      const weekInfo = days[0].split("\n")[1] + " - " + days[days.length - 1].split("\n")[1];
       return { schedule, week: weekInfo };
     });
 
@@ -224,7 +207,6 @@ async function getNotifications() {
     });
     console.log(`🌐 URL sau khi truy cập thông báo: ${page.url()}`);
 
-    // Chờ bảng thông báo với thời gian dài hơn
     console.log("⏳ Đang chờ bảng thông báo tải...");
     await page.waitForSelector(".MuiTableBody-root", { timeout: 120000 }).catch(async () => {
       const content = await page.content();
@@ -261,7 +243,7 @@ async function getNotifications() {
   }
 }
 
-// Hàm lấy công tác xã hội (giữ nguyên vì đã hoạt động)
+// Hàm lấy công tác xã hội
 async function getSocialWork() {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -350,7 +332,6 @@ bot.onText(/\/start/, (msg) => {
     chatId,
     "👋 Xin chào! Mình là Trợ lý VHU.\n" +
       "📅 /tuannay - Lịch học tuần này.\n" +
-      "📅 /tuansau - Lịch học tuần sau.\n" +
       "🔔 /thongbao - Danh sách thông báo.\n" +
       "📋 /congtac - Công tác xã hội.\n" +
       "💡 Nhấn nút menu 📋 để chọn lệnh nhanh!"
@@ -361,8 +342,8 @@ bot.onText(/\/tuannay/, async (msg) => {
   const chatId = msg.chat.id;
   bot.sendMessage(chatId, "📅 Đang lấy lịch học tuần này, vui lòng chờ...");
   try {
-    const lichHoc = await getSchedule(0);
-    let message = `📅 *Lịch học tuần ${lichHoc.week || "này"}*\n*------------------------------------*\n`;
+    const lichHoc = await getSchedule();
+    let message = `📅 *Lịch học tuần ${lichHoc.week || "hiện tại"}*\n*------------------------------------*\n`;
     for (const [ngay, monHocs] of Object.entries(lichHoc.schedule)) {
       message += `📌 *${ngay}:*\n${
         monHocs.length
@@ -380,23 +361,7 @@ bot.onText(/\/tuannay/, async (msg) => {
 
 bot.onText(/\/tuansau/, async (msg) => {
   const chatId = msg.chat.id;
-  bot.sendMessage(chatId, "📅 Đang lấy lịch học tuần sau, vui lòng chờ...");
-  try {
-    const lichHoc = await getSchedule(1);
-    let message = `📅 *Lịch học tuần ${lichHoc.week || "sau"}*\n*------------------------------------*\n`;
-    for (const [ngay, monHocs] of Object.entries(lichHoc.schedule)) {
-      message += `📌 *${ngay}:*\n${
-        monHocs.length
-          ? monHocs
-              .map((m) => `📖 ${m.subject} (${m.periods}, ${m.startTime} - ${m.room}, GV: ${m.professor})`)
-              .join("\n")
-          : "❌ Không có lịch"
-      }\n\n`;
-    }
-    bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
-  } catch (error) {
-    bot.sendMessage(chatId, `❌ Lỗi lấy lịch học tuần sau: ${error.message}`);
-  }
+  bot.sendMessage(chatId, "📅 Lệnh /tuansau đã bị xóa vì chỉ lấy lịch tuần hiện tại.");
 });
 
 bot.onText(/\/thongbao/, async (msg) => {
