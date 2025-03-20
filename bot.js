@@ -104,7 +104,7 @@ async function login(page, username, password, retries = 5) {
   }
 }
 
-// Hàm lấy lịch học (đã loại bỏ nút chọn tuần)
+// Hàm lấy lịch học
 async function getSchedule() {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -153,25 +153,28 @@ async function getSchedule() {
       const schedule = {};
 
       days.forEach((day, dayIndex) => {
-        schedule[day] = [];
+        const [dayName, date] = day.split("\n"); // Tách "Thứ 2" và "17/03/2025"
+        const formattedDay = `${dayName} (${date})`;
+        schedule[formattedDay] = [];
         const cells = table.querySelectorAll(`tbody td:nth-child(${dayIndex + 2})`);
         cells.forEach((cell) => {
           const detail = cell.querySelector(".DetailSchedule");
           if (detail) {
             const spans = detail.querySelectorAll("span");
-            schedule[day].push({
+            schedule[formattedDay].push({
               room: spans[0]?.textContent.trim() || "Không rõ",
               subject: spans[1]?.textContent.trim() || "Không rõ",
               classCode: spans[2]?.textContent.replace("LHP: ", "").trim() || "Không rõ",
               periods: spans[4]?.textContent.replace("Tiết: ", "").trim() || "Không rõ",
               startTime: spans[5]?.textContent.replace("Giờ bắt đầu: ", "").trim() || "Không rõ",
               professor: spans[6]?.textContent.replace("GV: ", "").trim() || "Không rõ",
+              email: spans[7]?.textContent.replace("Email: ", "").trim() || "",
             });
           }
         });
       });
 
-      const weekInfo = days[0].split("\n")[1] + " - " + days[days.length - 1].split("\n")[1];
+      const weekInfo = `${days[0].split("\n")[1]} - ${days[days.length - 1].split("\n")[1]}`;
       return { schedule, week: weekInfo };
     });
 
@@ -343,15 +346,18 @@ bot.onText(/\/tuannay/, async (msg) => {
   bot.sendMessage(chatId, "📅 Đang lấy lịch học tuần này, vui lòng chờ...");
   try {
     const lichHoc = await getSchedule();
-    let message = `📅 *Lịch học tuần ${lichHoc.week || "hiện tại"}*\n*------------------------------------*\n`;
+    let message = `📅 **Lịch học tuần ${lichHoc.week}**\n------------------------------------\n`;
     for (const [ngay, monHocs] of Object.entries(lichHoc.schedule)) {
-      message += `📌 *${ngay}:*\n${
-        monHocs.length
-          ? monHocs
-              .map((m) => `📖 ${m.subject} (${m.periods}, ${m.startTime} - ${m.room}, GV: ${m.professor})`)
-              .join("\n")
-          : "❌ Không có lịch"
-      }\n\n`;
+      message += `📌 **${ngay}:**\n`;
+      if (monHocs.length) {
+        monHocs.forEach((m) => {
+          message += `📖 **${m.subject.split(" (")[0]} – ${m.classCode.split("242")[1].substring(0, 7)}**\n` +
+                     `     (Tiết ${m.periods}, Giờ bắt đầu: ${m.startTime} – Phòng học: ${m.room}, GV: ${m.professor}, Email: ${m.email || "Chưa có"})\n`;
+        });
+      } else {
+        message += "❌ Không có lịch\n";
+      }
+      message += "\n";
     }
     bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
   } catch (error) {
@@ -369,9 +375,9 @@ bot.onText(/\/thongbao/, async (msg) => {
   bot.sendMessage(chatId, "🔔 Đang lấy thông báo, vui lòng chờ...");
   try {
     const notifications = await getNotifications();
-    let message = "🔔 *Thông báo mới nhất:*\n*------------------------------------*\n";
+    let message = "🔔 **Thông báo mới nhất:**\n------------------------------------\n";
     notifications.slice(0, 5).forEach((n, i) => {
-      message += `📢 *${i + 1}. ${n.MessageSubject}*\n📩 ${n.SenderName}\n⏰ ${n.CreationDate}\n\n`;
+      message += `📢 **${i + 1}. ${n.MessageSubject}**\n📩 ${n.SenderName}\n⏰ ${n.CreationDate}\n\n`;
     });
     if (notifications.length > 5) message += `📢 Còn ${notifications.length - 5} thông báo khác.`;
     bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
@@ -385,9 +391,9 @@ bot.onText(/\/congtac/, async (msg) => {
   bot.sendMessage(chatId, "📋 Đang lấy công tác xã hội, vui lòng chờ...");
   try {
     const congTacData = await getSocialWork();
-    let message = "📋 *Công tác xã hội:*\n*------------------------------------*\n";
+    let message = "📋 **Công tác xã hội:**\n------------------------------------\n";
     congTacData.slice(0, 5).forEach((c, i) => {
-      message += `📌 *${c.Index}. ${c.Event}*\n📍 ${c.Location || "Chưa cập nhật"}\n👥 ${c.NumRegistered} người đăng ký\n⭐ ${c.Points} điểm\n🕛 ${c.StartTime} - ${c.EndTime}\n\n`;
+      message += `📌 **${c.Index}. ${c.Event}**\n📍 ${c.Location || "Chưa cập nhật"}\n👥 ${c.NumRegistered} người đăng ký\n⭐ ${c.Points} điểm\n🕛 ${c.StartTime} - ${c.EndTime}\n\n`;
     });
     if (congTacData.length > 5) message += `📢 Còn ${congTacData.length - 5} công tác khác.`;
     bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
