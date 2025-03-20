@@ -104,7 +104,7 @@ async function login(page, username, password, retries = 5) {
   }
 }
 
-// Hàm lấy lịch học (sửa lại để tránh lỗi undefined)
+// Hàm lấy lịch học (sửa để lấy tuần từ dropdown và tách ngày đúng)
 async function getSchedule() {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -153,10 +153,9 @@ async function getSchedule() {
       const schedule = {};
 
       days.forEach((day, dayIndex) => {
-        const parts = day.split("\n"); // Tách "Thứ 2" và "17/03/2025"
-        const dayName = parts[0] || "Không rõ"; // Đảm bảo có giá trị mặc định
-        const date = parts[1] ? parts[1].trim() : "Không rõ";
-        const formattedDay = `${dayName} (${date})`;
+        const dayText = day.replace(/\s+/g, " "); // Chuẩn hóa khoảng trắng
+        const [dayName, date] = dayText.split(" "); // Tách "Thứ 2" và "17/03/2025"
+        const formattedDay = `${dayName} (${date || "Không rõ"})`;
         schedule[formattedDay] = [];
         const cells = table.querySelectorAll(`tbody td:nth-child(${dayIndex + 2})`);
         cells.forEach((cell) => {
@@ -178,13 +177,9 @@ async function getSchedule() {
         });
       });
 
-      // Kiểm tra và lấy weekInfo an toàn
-      let weekInfo = "Không xác định";
-      if (days.length > 0) {
-        const firstDay = days[0].split("\n")[1] || "Không rõ";
-        const lastDay = days[days.length - 1].split("\n")[1] || "Không rõ";
-        weekInfo = `${firstDay.trim()} - ${lastDay.trim()}`;
-      }
+      // Lấy tuần từ dropdown
+      const weekElement = document.querySelector('div[aria-labelledby="demo-simple-select-helper-label"][name="Tuan"]');
+      const weekInfo = weekElement ? weekElement.textContent.trim() : "Không xác định";
 
       return { schedule, week: weekInfo };
     });
@@ -326,7 +321,9 @@ app.get("/ping", (req, res) => {
 app.listen(PORT, async () => {
   console.log(`Server chạy trên port ${PORT}`);
   try {
+    console.log("⏹️ Đang dừng polling cũ...");
     await bot.stopPolling();
+    console.log("✅ Polling cũ đã dừng.");
     await bot.startPolling({ polling: { interval: 1000 } });
     console.log("✅ Bot đang chạy ở chế độ polling...");
   } catch (error) {
