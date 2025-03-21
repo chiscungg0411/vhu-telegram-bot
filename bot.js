@@ -310,13 +310,13 @@ bot.onText(/\/start/, (msg) => {
       "📅 /tuannay - Lịch học tuần này.\n" +
       "🔔 /thongbao - Danh sách thông báo.\n" +
       "📋 /congtac - Công tác xã hội.\n" +
-      "💡 Nhấn nút menu 📋 để chọn lệnh nhanh!"
+      "💡 Nhấn nút Menu 📋 bên cạnh để chọn lệnh nhanh!"
   );
 });
 
 bot.onText(/\/tuannay/, async (msg) => {
   const chatId = msg.chat.id;
-  bot.sendMessage(chatId, "📅 Đang lấy lịch học tuần này, vui lòng chờ trong giây ⌛...");
+  bot.sendMessage(chatId, "📅 Đang lấy lịch học tuần này, vui lòng chờ trong giây lát ⌛...");
   try {
     const lichHoc = await getSchedule();
     let message = `📅 **Lịch học tuần ${lichHoc.week}**\n------------------------------------\n`;
@@ -332,7 +332,7 @@ bot.onText(/\/tuannay/, async (msg) => {
                      `🕛 **Giờ bắt đầu:** ${m.startTime}\n` +
                      `📍 **Phòng học:** ${m.room}\n` +
                      `🧑‍🏫 **Giảng viên:** ${m.professor}\n` +
-                     `📧 **Email:** ${m.email})\n`;
+                     `📧 **Email:** ${m.email}\n\n`;
         });
       } else {
         message += "❌ Không có lịch\n";
@@ -352,7 +352,7 @@ bot.onText(/\/tuannay/, async (msg) => {
 
 bot.onText(/\/thongbao/, async (msg) => {
   const chatId = msg.chat.id;
-  bot.sendMessage(chatId, "🔔 Đang lấy thông báo, vui lòng chờ trong giây ⌛...");
+  bot.sendMessage(chatId, "🔔 Đang lấy thông báo, vui lòng chờ trong giây lát ⌛...");
   try {
     const notifications = await getNotifications();
     let message = "🔔 **Danh sách thông báo mới nhất:**\n------------------------------------\n";
@@ -368,7 +368,7 @@ bot.onText(/\/thongbao/, async (msg) => {
 
 bot.onText(/\/congtac/, async (msg) => {
   const chatId = msg.chat.id;
-  bot.sendMessage(chatId, "📋 Đang lấy danh sách công tác xã hội, vui lòng chờ trong giây ⌛...");
+  bot.sendMessage(chatId, "📋 Đang lấy danh sách công tác xã hội, vui lòng chờ trong giây lát ⌛...");
   try {
     const congTacData = await getSocialWork();
     let message = "📋 **Danh sách công tác xã hội:**\n------------------------------------\n";
