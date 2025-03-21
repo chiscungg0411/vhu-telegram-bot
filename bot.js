@@ -316,7 +316,7 @@ bot.onText(/\/start/, (msg) => {
 
 bot.onText(/\/tuannay/, async (msg) => {
   const chatId = msg.chat.id;
-  bot.sendMessage(chatId, "📅 Đang lấy lịch học tuần này, vui lòng chờ...");
+  bot.sendMessage(chatId, "📅 Đang lấy lịch học tuần này, vui lòng chờ trong giây ⌛...");
   try {
     const lichHoc = await getSchedule();
     let message = `📅 **Lịch học tuần ${lichHoc.week}**\n------------------------------------\n`;
@@ -327,8 +327,12 @@ bot.onText(/\/tuannay/, async (msg) => {
       if (monHocs.length) {
         hasSchedule = true;
         monHocs.forEach((m) => {
-          message += `📖 **${m.subject} – ${m.classCode}**\n` +
-                     `     (Tiết ${m.periods}, Giờ bắt đầu: ${m.startTime} – Phòng học: ${m.room}, GV: ${m.professor}, Email: ${m.email})\n`;
+          message += `📖 **Môn học: ${m.subject} – ${m.classCode}**\n` +
+                     `📅 **Tiết:** ${m.periods}\n` +
+                     `🕛 **Giờ bắt đầu:** ${m.startTime}\n` +
+                     `📍 **Phòng học:** ${m.room}\n` +
+                     `🧑‍🏫 **Giảng viên:** ${m.professor}\n` +
+                     `📧 **Email:** ${m.email})\n`;
         });
       } else {
         message += "❌ Không có lịch\n";
@@ -348,14 +352,14 @@ bot.onText(/\/tuannay/, async (msg) => {
 
 bot.onText(/\/thongbao/, async (msg) => {
   const chatId = msg.chat.id;
-  bot.sendMessage(chatId, "🔔 Đang lấy thông báo, vui lòng chờ...");
+  bot.sendMessage(chatId, "🔔 Đang lấy thông báo, vui lòng chờ trong giây ⌛...");
   try {
     const notifications = await getNotifications();
-    let message = "🔔 **Thông báo mới nhất:**\n------------------------------------\n";
+    let message = "🔔 **Danh sách thông báo mới nhất:**\n------------------------------------\n";
     notifications.slice(0, 5).forEach((n, i) => {
       message += `📢 **${i + 1}. ${n.MessageSubject}**\n📩 ${n.SenderName}\n⏰ ${n.CreationDate}\n\n`;
     });
-    if (notifications.length > 5) message += `📢 Còn ${notifications.length - 5} thông báo khác.`;
+    if (notifications.length > 5) message += `📢 Còn ${notifications.length - 5} thông báo khác. Hãy truy cập vào [Portal VHU](https://portal.vhu.edu.vn/login) để biết thêm thông tin chi tiết.`;
     bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
   } catch (error) {
     bot.sendMessage(chatId, `❌ Lỗi lấy thông báo: ${error.message}`);
@@ -364,14 +368,14 @@ bot.onText(/\/thongbao/, async (msg) => {
 
 bot.onText(/\/congtac/, async (msg) => {
   const chatId = msg.chat.id;
-  bot.sendMessage(chatId, "📋 Đang lấy công tác xã hội, vui lòng chờ...");
+  bot.sendMessage(chatId, "📋 Đang lấy danh sách công tác xã hội, vui lòng chờ trong giây ⌛...");
   try {
     const congTacData = await getSocialWork();
-    let message = "📋 **Công tác xã hội:**\n------------------------------------\n";
+    let message = "📋 **Danh sách công tác xã hội:**\n------------------------------------\n";
     congTacData.slice(0, 5).forEach((c, i) => {
       message += `📌 **${c.Index}. ${c.Event}**\n📍 ${c.Location || "Chưa cập nhật"}\n👥 ${c.NumRegistered} người đăng ký\n⭐ ${c.Points} điểm\n🕛 ${c.StartTime} - ${c.EndTime}\n\n`;
     });
-    if (congTacData.length > 5) message += `📢 Còn ${congTacData.length - 5} công tác khác.`;
+    if (congTacData.length > 5) message += `📢 Còn ${congTacData.length - 5} công tác khác. Hãy truy cập vào [Portal VHU](https://portal.vhu.edu.vn/login) để biết thêm thông tin chi tiết.`;
     bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
   } catch (error) {
     bot.sendMessage(chatId, `❌ Lỗi lấy công tác xã hội: ${error.message}`);
