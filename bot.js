@@ -15,7 +15,7 @@ const app = express();
 app.use(express.json());
 const bot = new TelegramBot(TOKEN, { polling: { interval: 1000, autoStart: false } });
 
-// Xử lý lỗi hệ thống
+// **Xử lý lỗi hệ thống**
 process.on("unhandledRejection", (reason, promise) => {
   console.error("❌ Unhandled Rejection at:", promise, "reason:", reason);
 });
@@ -23,7 +23,7 @@ process.on("uncaughtException", (error) => {
   console.error("❌ Uncaught Exception:", error.message);
 });
 
-// Hàm khởi tạo trình duyệt Puppeteer
+// **Hàm khởi tạo trình duyệt Puppeteer**
 async function launchBrowser() {
   try {
     const browser = await puppeteerExtra.launch({
@@ -36,9 +36,11 @@ async function launchBrowser() {
         "--disable-gpu",
         "--disable-extensions",
         "--disable-background-networking",
+        "--single-process", // Giảm tải tài nguyên
+        "--no-zygote",
       ],
       defaultViewport: { width: 1280, height: 720 },
-      timeout: 60000,
+      timeout: 120000, // Tăng timeout lên 120 giây
     });
     console.log("✅ Trình duyệt Puppeteer đã khởi động.");
     return browser;
@@ -48,20 +50,26 @@ async function launchBrowser() {
   }
 }
 
-// Hàm đăng nhập vào portal
+// **Hàm đăng nhập vào portal**
 async function login(page, username, password, retries = 5) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       console.log(`🔑 Thử đăng nhập lần ${attempt}...`);
       await page.goto("https://portal.vhu.edu.vn/login", {
         waitUntil: "networkidle0",
-        timeout: 120000,
+        timeout: 120000, // Tăng timeout lên 120 giây
       });
       console.log("✅ Trang đăng nhập đã tải.");
 
-      await page.waitForSelector("input[name='email']", { timeout: 60000 });
+      // Kiểm tra xem có CAPTCHA không
+      const hasCaptcha = await page.evaluate(() => !!document.querySelector("iframe[src*='captcha']"));
+      if (hasCaptcha) {
+        throw new Error("Trang yêu cầu CAPTCHA, không thể đăng nhập tự động.");
+      }
+
+      await page.waitForSelector("input[name='email']", { timeout: 120000 });
       await page.type("input[name='email']", username, { delay: 100 });
-      await page.waitForSelector("input[name='password']", { timeout: 60000 });
+      await page.waitForSelector("input[name='password']", { timeout: 120000 });
       await page.type("input[name='password']", password, { delay: 100 });
       console.log("✍️ Đã nhập thông tin đăng nhập.");
 
@@ -69,7 +77,7 @@ async function login(page, username, password, retries = 5) {
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
       );
 
-      await page.waitForSelector("button[type='submit']", { timeout: 60000 });
+      await page.waitForSelector("button[type='submit']", { timeout: 120000 });
       await page.click("button[type='submit']");
       console.log("⏳ Đang chờ phản hồi sau đăng nhập...");
 
@@ -77,12 +85,9 @@ async function login(page, username, password, retries = 5) {
       const finalUrl = page.url();
       console.log(`🌐 URL sau đăng nhập: ${finalUrl}`);
 
-      const content = await page.content();
       if (finalUrl.includes("/login")) {
-        console.log(`📄 Nội dung trang sau đăng nhập thất bại: ${content.slice(0, 500)}...`);
         const errorMessage = await page.evaluate(() => {
           if (document.body.innerText.includes("Username or password is incorrect")) return "Sai tên đăng nhập hoặc mật khẩu.";
-          if (document.querySelector("iframe[src*='captcha']")) return "Yêu cầu CAPTCHA, không thể xử lý tự động.";
           return "Đăng nhập thất bại (lỗi không xác định).";
         });
         throw new Error(`Đăng nhập thất bại: ${errorMessage}`);
@@ -92,9 +97,6 @@ async function login(page, username, password, retries = 5) {
       return true;
     } catch (error) {
       console.error(`❌ Lỗi đăng nhập lần ${attempt}:`, error.message);
-      console.log(`🌐 URL khi lỗi: ${page.url()}`);
-      const pageContent = await page.content();
-      console.log(`📄 Nội dung trang khi lỗi: ${pageContent.slice(0, 500)}...`);
       if (attempt === retries) throw new Error(`Đăng nhập thất bại sau ${retries} lần: ${error.message}`);
       console.log("⏳ Thử lại sau 5 giây...");
       await page.close();
@@ -104,7 +106,7 @@ async function login(page, username, password, retries = 5) {
   }
 }
 
-// Hàm lấy lịch học (sửa lại để lấy dữ liệu chính xác)
+// **Hàm lấy lịch học**
 async function getSchedule() {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -116,8 +118,6 @@ async function getSchedule() {
       timeout: 120000,
     });
     console.log(`🌐 URL sau khi vào trang chủ: ${page.url()}`);
-    const homeContent = await page.content();
-    console.log(`📄 Nội dung trang chủ: ${homeContent.slice(0, 500)}...`);
 
     console.log("📅 Điều hướng trực tiếp đến lịch học...");
     await page.goto("https://portal.vhu.edu.vn/student/schedules", {
@@ -129,80 +129,44 @@ async function getSchedule() {
     console.log("⏳ Đang chờ bảng lịch học tải...");
     await page.waitForSelector("#psc-table-head", { timeout: 120000 }).catch(async () => {
       const content = await page.content();
-      console.log(`❌ Không tìm thấy #psc-table-head. Nội dung trang: ${content.slice(0, 1000)}...`);
-      if (content.includes("captcha") || content.includes("verify")) {
-        throw new Error("Trang yêu cầu CAPTCHA, không thể tự động xử lý.");
-      } else if (content.includes("login")) {
-        throw new Error("Phiên đăng nhập thất bại, bị đưa về trang login.");
-      } else {
-        throw new Error("Không tìm thấy bảng lịch học, có thể giao diện đã thay đổi hoặc trang chưa tải xong.");
-      }
+      throw new Error(`Không tìm thấy #psc-table-head. Nội dung trang: ${content.slice(0, 500)}...`);
     });
-
-    const scheduleContent = await page.content();
-    console.log(`📄 Nội dung trang lịch học: ${scheduleContent.slice(0, 500)}...`);
 
     const scheduleData = await page.evaluate(() => {
       const table = document.querySelector("#psc-table-head");
       if (!table) throw new Error("Không tìm thấy bảng lịch học!");
-
-      const headers = Array.from(table.querySelectorAll("thead th")).map((th) =>
-        th.textContent.trim().replace(/\s+/g, " ") // Chuẩn hóa khoảng trắng
-      );
-      console.log("Headers:", headers); // Debug headers
-
-      const days = headers.slice(1); // Bỏ cột "Tiết"
+      const headers = Array.from(table.querySelectorAll("thead th")).map((th) => th.textContent.trim());
+      const days = headers.slice(1);
       const schedule = {};
-
-      if (days.length === 0) {
-        console.log("Không có ngày nào trong bảng!");
-        return { schedule: { "Không rõ (Không rõ)": [] }, week: "này của bạn" };
-      }
-
       days.forEach((day, dayIndex) => {
-        const dayParts = day.match(/^(Thứ \d|Chủ nhật) (\d{2}\/\d{2}\/\d{4})$/); // Tách "Thứ X" và "dd/mm/yyyy"
-        const dayName = dayParts ? dayParts[1] : "Không rõ";
-        const date = dayParts ? dayParts[2] : "Không rõ";
-        const formattedDay = `${dayName} (${date})`;
-        schedule[formattedDay] = [];
-
+        schedule[day] = [];
         const cells = table.querySelectorAll(`tbody td:nth-child(${dayIndex + 2})`);
-        console.log(`Cells for ${formattedDay}:`, cells.length); // Debug số ô trong cột
-
         cells.forEach((cell) => {
           const detail = cell.querySelector(".DetailSchedule");
           if (detail) {
             const spans = detail.querySelectorAll("span");
-            const subjectFull = spans[1]?.textContent.trim() || "Không rõ";
-            const subjectMatch = subjectFull.match(/(.*) \((.*)\)/); // Tách tên và mã lớp
-            schedule[formattedDay].push({
+            schedule[day].push({
               room: spans[0]?.textContent.trim() || "Không rõ",
-              subject: subjectMatch ? subjectMatch[1] : subjectFull,
-              classCode: subjectMatch ? subjectMatch[2] : "Không rõ",
+              subject: spans[1]?.textContent.trim() || "Không rõ",
               periods: spans[4]?.textContent.replace("Tiết: ", "").trim() || "Không rõ",
-              startTime: spans[5]?.textContent.replace("Giờ bắt đầu: ", "").trim() || "Không rõ",
-              professor: spans[6]?.textContent.replace("GV: ", "").trim() || "Không rõ",
-              email: spans[7]?.textContent.replace("Email: ", "").trim() || "",
             });
           }
         });
       });
-
-      const weekInfo = "này của bạn";
-      return { schedule, week: weekInfo };
+      return { schedule, week: "này của bạn" };
     });
 
-    console.log("✅ Đã lấy lịch học:", scheduleData);
-    await browser.close();
+    console.log("✅ Đã lấy lịch học.");
     return scheduleData;
   } catch (error) {
     console.error("❌ Lỗi trong getSchedule:", error.message);
-    await browser.close();
     throw error;
+  } finally {
+    await browser.close();
   }
 }
 
-// Hàm lấy thông báo
+// **Hàm lấy thông báo**
 async function getNotifications() {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -214,8 +178,6 @@ async function getNotifications() {
       timeout: 120000,
     });
     console.log(`🌐 URL sau khi vào trang chủ: ${page.url()}`);
-    const homeContent = await page.content();
-    console.log(`📄 Nội dung trang chủ: ${homeContent.slice(0, 500)}...`);
 
     console.log("🔔 Điều hướng trực tiếp đến thông báo...");
     await page.goto("https://portal.vhu.edu.vn/student/index", {
@@ -227,14 +189,7 @@ async function getNotifications() {
     console.log("⏳ Đang chờ bảng thông báo tải...");
     await page.waitForSelector(".MuiTableBody-root", { timeout: 120000 }).catch(async () => {
       const content = await page.content();
-      console.log(`❌ Không tìm thấy .MuiTableBody-root. Nội dung trang: ${content.slice(0, 1000)}...`);
-      if (content.includes("captcha") || content.includes("verify")) {
-        throw new Error("Trang yêu cầu CAPTCHA, không thể tự động xử lý.");
-      } else if (content.includes("login")) {
-        throw new Error("Phiên đăng nhập thất bại, bị đưa về trang login.");
-      } else {
-        throw new Error("Không tìm thấy bảng thông báo, có thể giao diện đã thay đổi hoặc trang chưa tải xong.");
-      }
+      throw new Error(`Không tìm thấy .MuiTableBody-root. Nội dung trang: ${content.slice(0, 500)}...`);
     });
 
     const notifications = await page.evaluate(() => {
@@ -251,26 +206,20 @@ async function getNotifications() {
     });
 
     console.log("✅ Đã lấy thông báo.");
-    await browser.close();
     return notifications;
   } catch (error) {
     console.error("❌ Lỗi trong getNotifications:", error.message);
-    await browser.close();
     throw error;
+  } finally {
+    await browser.close();
   }
 }
 
-// Hàm lấy công tác xã hội
+// **Hàm lấy công tác xã hội**
 async function getSocialWork() {
   const browser = await launchBrowser();
   const page = await browser.newPage();
   try {
-    await page.setRequestInterception(true);
-    page.on("request", (req) => {
-      if (["image", "stylesheet", "font"].includes(req.resourceType())) req.abort();
-      else req.continue();
-    });
-
     await login(page, process.env.VHU_EMAIL, process.env.VHU_PASSWORD);
     console.log("🏠 Điều hướng đến trang chủ sinh viên...");
     await page.goto("https://portal.vhu.edu.vn/student", {
@@ -285,12 +234,9 @@ async function getSocialWork() {
     });
     console.log(`🌐 URL sau khi truy cập: ${page.url()}`);
 
-    await page.waitForFunction(
-      () => document.querySelector(".MuiTableBody-root") !== null,
-      { timeout: 60000 }
-    ).catch(async () => {
+    await page.waitForSelector(".MuiTableBody-root", { timeout: 120000 }).catch(async () => {
       const content = await page.content();
-      throw new Error(`Không tìm thấy bảng công tác xã hội: ${content.slice(0, 500)}...`);
+      throw new Error(`Không tìm thấy bảng công tác xã hội. Nội dung trang: ${content.slice(0, 500)}...`);
     });
 
     const socialWork = await page.evaluate(() => {
@@ -311,40 +257,38 @@ async function getSocialWork() {
     });
 
     console.log("✅ Đã lấy công tác xã hội.");
-    await browser.close();
     return socialWork;
   } catch (error) {
     console.error("❌ Lỗi trong getSocialWork:", error.message);
-    await browser.close();
     throw error;
+  } finally {
+    await browser.close();
   }
 }
 
-// Cấu hình server
+// **Cấu hình server**
 const PORT = process.env.PORT || 10000;
-app.get("/ping", (req, res) => {
-  res.status(200).send("Bot is alive!");
-});
+app.get("/ping", (req, res) => res.status(200).send("Bot is alive!"));
 
 app.listen(PORT, async () => {
   console.log(`Server chạy trên port ${PORT}`);
   try {
     console.log("⏹️ Đang dừng polling cũ...");
-    await bot.stopPolling();
+    await bot.stopPolling({ dropPendingUpdates: true }); // Thêm dropPendingUpdates để dừng hoàn toàn
     console.log("✅ Polling cũ đã dừng.");
-    await bot.startPolling({ polling: { interval: 1000 } });
+    await bot.startPolling({ polling: { interval: 1000, restart: true } });
     console.log("✅ Bot đang chạy ở chế độ polling...");
   } catch (error) {
     console.error("❌ Lỗi khởi động polling:", error.message);
   }
 });
 
-// Xử lý lỗi polling
+// **Xử lý lỗi polling**
 bot.on("polling_error", (error) => {
   console.error("❌ Polling error:", error.message);
 });
 
-// Xử lý lệnh Telegram
+// **Xử lý lệnh Telegram**
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
   bot.sendMessage(
@@ -366,16 +310,12 @@ bot.onText(/\/tuannay/, async (msg) => {
     let hasSchedule = false;
 
     for (const [ngay, monHocs] of Object.entries(lichHoc.schedule)) {
-      if (ngay === "Không rõ (Không rõ)" && monHocs.length === 0) {
-        message = `📅 **Lịch học tuần ${lichHoc.week}**\n------------------------------------\n❌ Không có lịch học trong tuần này.`;
-        break;
-      }
       message += `📌 **${ngay}:**\n`;
       if (monHocs.length) {
         hasSchedule = true;
         monHocs.forEach((m) => {
-          message += `📖 **${m.subject} – ${m.classCode}**\n` +
-                     `     (Tiết ${m.periods}, Giờ bắt đầu: ${m.startTime} – Phòng học: ${m.room}, GV: ${m.professor}, Email: ${m.email})\n`;
+          message += `📖 **${m.subject}**\n` +
+                     `     (Tiết ${m.periods}, Phòng học: ${m.room})\n`;
         });
       } else {
         message += "❌ Không có lịch\n";
@@ -383,7 +323,7 @@ bot.onText(/\/tuannay/, async (msg) => {
       message += "\n";
     }
 
-    if (!hasSchedule && message !== `📅 **Lịch học tuần ${lichHoc.week}**\n------------------------------------\n❌ Không có lịch học trong tuần này.`) {
+    if (!hasSchedule) {
       message = `📅 **Lịch học tuần ${lichHoc.week}**\n------------------------------------\n❌ Không có lịch học trong tuần này.`;
     }
 
@@ -391,11 +331,6 @@ bot.onText(/\/tuannay/, async (msg) => {
   } catch (error) {
     bot.sendMessage(chatId, `❌ Lỗi lấy lịch học: ${error.message}`);
   }
-});
-
-bot.onText(/\/tuansau/, async (msg) => {
-  const chatId = msg.chat.id;
-  bot.sendMessage(chatId, "📅 Lệnh /tuansau đã bị xóa vì chỉ lấy lịch tuần hiện tại.");
 });
 
 bot.onText(/\/thongbao/, async (msg) => {
