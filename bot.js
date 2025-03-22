@@ -36,11 +36,11 @@ async function launchBrowser() {
         "--disable-gpu",
         "--disable-extensions",
         "--disable-background-networking",
-        "--single-process", // Giảm tải tài nguyên
+        "--single-process",
         "--no-zygote",
       ],
       defaultViewport: { width: 1280, height: 720 },
-      timeout: 120000, // Tăng timeout lên 120 giây
+      timeout: 120000,
     });
     console.log("✅ Trình duyệt Puppeteer đã khởi động.");
     return browser;
@@ -57,11 +57,10 @@ async function login(page, username, password, retries = 5) {
       console.log(`🔑 Thử đăng nhập lần ${attempt}...`);
       await page.goto("https://portal.vhu.edu.vn/login", {
         waitUntil: "networkidle0",
-        timeout: 120000, // Tăng timeout lên 120 giây
+        timeout: 120000,
       });
       console.log("✅ Trang đăng nhập đã tải.");
 
-      // Kiểm tra xem có CAPTCHA không
       const hasCaptcha = await page.evaluate(() => !!document.querySelector("iframe[src*='captcha']"));
       if (hasCaptcha) {
         throw new Error("Trang yêu cầu CAPTCHA, không thể đăng nhập tự động.");
@@ -106,7 +105,7 @@ async function login(page, username, password, retries = 5) {
   }
 }
 
-// **Hàm lấy lịch học (đã cập nhật)**
+// **Hàm lấy lịch học**
 async function getSchedule() {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -136,13 +135,12 @@ async function getSchedule() {
       const table = document.querySelector("#psc-table-head");
       if (!table) throw new Error("Không tìm thấy bảng lịch học!");
 
-      // Tách "Thứ" và "Ngày" từ header
       const headers = Array.from(table.querySelectorAll("thead th")).map((th) => {
         const text = th.innerHTML.trim();
         const [thu, ngay] = text.split("<br>");
         return `${thu} - ${ngay}`;
       });
-      const days = headers.slice(1); // Bỏ cột "Tiết"
+      const days = headers.slice(1);
 
       const schedule = {};
       days.forEach((day, dayIndex) => {
@@ -153,7 +151,7 @@ async function getSchedule() {
           if (detail) {
             const spans = detail.querySelectorAll("span");
             const subjectFull = spans[1]?.textContent.trim() || "Không rõ";
-            const subjectMatch = subjectFull.match(/(.*) \((.*)\)/); // Tách tên môn và mã lớp
+            const subjectMatch = subjectFull.match(/(.*) \((.*)\)/);
             schedule[day].push({
               room: spans[0]?.textContent.trim() || "Không rõ",
               subject: subjectMatch ? subjectMatch[1] : subjectFull,
@@ -283,11 +281,17 @@ async function getSocialWork() {
 const PORT = process.env.PORT || 10000;
 app.get("/ping", (req, res) => res.status(200).send("Bot is alive!"));
 
+// Thêm endpoint để đánh thức chatbot
+app.get("/wake-up", (req, res) => {
+  console.log("⏰ Chatbot được đánh thức bởi cron-job.org!");
+  res.status(200).send("Chatbot is awake!");
+});
+
 app.listen(PORT, async () => {
   console.log(`Server chạy trên port ${PORT}`);
   try {
     console.log("⏹️ Đang dừng polling cũ...");
-    await bot.stopPolling({ dropPendingUpdates: true }); // Thêm dropPendingUpdates để dừng hoàn toàn
+    await bot.stopPolling({ dropPendingUpdates: true });
     console.log("✅ Polling cũ đã dừng.");
     await bot.startPolling({ polling: { interval: 1000, restart: true } });
     console.log("✅ Bot đang chạy ở chế độ polling...");
